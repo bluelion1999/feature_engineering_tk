@@ -4,8 +4,34 @@ A comprehensive Python toolkit for feature engineering and rudimentary data anal
 
 ## Installation
 
+### Install from GitHub
+
 ```bash
-pip install -r requirements.txt
+pip install git+https://github.com/bluelion1999/feature_engineering_tk.git
+```
+
+### Install from PyPI (coming soon)
+
+```bash
+pip install feature-engineering-tk
+```
+
+### Install from source
+
+```bash
+git clone https://github.com/bluelion1999/feature_engineering_tk.git
+cd feature_engineering_tk
+pip install -e .
+```
+
+### Development Installation
+
+For development with additional tools:
+
+```bash
+git clone https://github.com/bluelion1999/feature_engineering_tk.git
+cd feature_engineering_tk
+pip install -e ".[dev]"
 ```
 
 ## Modules
@@ -19,7 +45,7 @@ pip install -r requirements.txt
 
 ```python
 import pandas as pd
-from mltoolkit import DataAnalyzer, FeatureEngineer, DataPreprocessor, FeatureSelector, quick_analysis
+from feature_engineering_tk import DataAnalyzer, FeatureEngineer, DataPreprocessor, FeatureSelector, quick_analysis
 
 # Load your data
 df = pd.read_csv('your_data.csv')
@@ -33,7 +59,7 @@ quick_analysis(df)
 ### 1. Data Analysis
 
 ```python
-from mltoolkit import DataAnalyzer
+from feature_engineering_tk import DataAnalyzer
 
 # Initialize analyzer
 analyzer = DataAnalyzer(df)
@@ -74,7 +100,7 @@ analyzer.plot_distributions(columns=['age', 'salary', 'score'])
 ### 2. Data Preprocessing
 
 ```python
-from mltoolkit import DataPreprocessor
+from feature_engineering_tk import DataPreprocessor
 
 # Initialize preprocessor
 preprocessor = DataPreprocessor(df)
@@ -130,7 +156,7 @@ cleaned_df = preprocessor.get_dataframe()
 ### 3. Feature Engineering
 
 ```python
-from mltoolkit import FeatureEngineer
+from feature_engineering_tk import FeatureEngineer
 
 # Initialize feature engineer
 engineer = FeatureEngineer(df)
@@ -229,7 +255,7 @@ engineered_df = engineer.get_dataframe()
 ### 4. Feature Selection
 
 ```python
-from mltoolkit import FeatureSelector, select_features_auto
+from feature_engineering_tk import FeatureSelector, select_features_auto
 
 # Initialize feature selector
 selector = FeatureSelector(df, target_column='target')
@@ -289,7 +315,7 @@ auto_selected_df = select_features_auto(
 
 ```python
 import pandas as pd
-from mltoolkit import DataAnalyzer, DataPreprocessor, FeatureEngineer, FeatureSelector
+from feature_engineering_tk import DataAnalyzer, DataPreprocessor, FeatureEngineer, FeatureSelector
 
 # Load data
 df = pd.read_csv('data.csv')

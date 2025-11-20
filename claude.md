@@ -13,7 +13,7 @@ This is **MLToolkit**, a comprehensive Python library for feature engineering an
 ## Project Structure
 
 ```
-mltoolkit/
+feature_engineering_tk/
 ├── __init__.py                 # Package initialization, exposes main classes
 ├── data_analysis.py           # Exploratory data analysis and visualization
 ├── feature_engineering.py     # Feature transformation and creation
@@ -21,7 +21,11 @@ mltoolkit/
 ├── feature_selection.py       # Feature selection methods
 ├── requirements.txt           # Project dependencies
 ├── README.md                  # User-facing documentation
-└── claude.md                  # This file - development documentation
+├── claude.md                  # This file - development documentation
+├── setup.py                   # Package installation configuration
+├── LICENSE                    # MIT License
+├── .gitignore                 # Git ignore file
+└── MANIFEST.in                # Package manifest
 ```
 
 ## Module Descriptions
@@ -413,7 +417,7 @@ __all__ = [
 - Uses relative imports (`.data_analysis`, not `data_analysis`)
 - Exposes both classes and helper functions
 - Includes version number
-- `__all__` list controls `from mltoolkit import *`
+- `__all__` list controls `from feature_engineering_tk import *`
 
 ## Common Implementation Examples
 
@@ -488,7 +492,7 @@ return df_result
 
 ```python
 import pandas as pd
-from mltoolkit import DataAnalyzer, DataPreprocessor, FeatureEngineer, FeatureSelector
+from feature_engineering_tk import DataAnalyzer, DataPreprocessor, FeatureEngineer, FeatureSelector
 
 # 1. Load and analyze
 df = pd.read_csv('data.csv')

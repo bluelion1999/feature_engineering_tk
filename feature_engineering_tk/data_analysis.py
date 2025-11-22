@@ -2,12 +2,32 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import logging
 from typing import List, Optional, Dict, Any
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class DataAnalyzer:
+    """
+    Data analysis class for exploratory data analysis and visualization.
+
+    Provides statistical summaries, outlier detection, correlation analysis,
+    and visualization tools.
+    """
 
     def __init__(self, df: pd.DataFrame):
+        """
+        Initialize DataAnalyzer with a dataframe.
+
+        Args:
+            df: Input pandas DataFrame
+        """
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("Input must be a pandas DataFrame")
+        if df.empty:
+            logger.warning("Initializing with empty DataFrame")
         self.df = df.copy()
 
     def get_basic_info(self) -> Dict[str, Any]:
@@ -98,7 +118,13 @@ class DataAnalyzer:
             if col not in self.df.columns:
                 continue
 
-            z_scores = np.abs((self.df[col] - self.df[col].mean()) / self.df[col].std())
+            # Fixed: Add division by zero check
+            col_std = self.df[col].std()
+            if col_std == 0:
+                logger.warning(f"Column '{col}' has zero standard deviation, skipping outlier detection")
+                continue
+
+            z_scores = np.abs((self.df[col] - self.df[col].mean()) / col_std)
             outlier_mask = z_scores > threshold
 
             if outlier_mask.sum() > 0:
@@ -160,13 +186,22 @@ class DataAnalyzer:
         df_cardinality = pd.DataFrame(cardinality)
         return df_cardinality.sort_values('unique_count', ascending=False).reset_index(drop=True)
 
-    def plot_missing_values(self, figsize: tuple = (12, 6)):
-        """Visualize missing values."""
+    def plot_missing_values(self, figsize: tuple = (12, 6), show: bool = True):
+        """
+        Visualize missing values.
+
+        Args:
+            figsize: Figure size as (width, height)
+            show: If True, display the plot. Default True.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object, or None if no missing values
+        """
         missing_summary = self.get_missing_summary()
 
         if missing_summary.empty:
-            print("No missing values found.")
-            return
+            logger.info("No missing values found")
+            return None
 
         fig, ax = plt.subplots(figsize=figsize)
         sns.barplot(data=missing_summary, x='column', y='missing_percent', ax=ax)
@@ -175,31 +210,62 @@ class DataAnalyzer:
         ax.set_title('Missing Values by Column')
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
-        plt.show()
 
-    def plot_correlation_heatmap(self, figsize: tuple = (10, 8), method: str = 'pearson', annot: bool = True):
-        """Plot correlation heatmap."""
+        if show:
+            plt.show()
+
+        return fig
+
+    def plot_correlation_heatmap(self, figsize: tuple = (10, 8), method: str = 'pearson',
+                                  annot: bool = True, show: bool = True):
+        """
+        Plot correlation heatmap.
+
+        Args:
+            figsize: Figure size as (width, height)
+            method: Correlation method ('pearson', 'spearman', 'kendall')
+            annot: If True, annotate cells with correlation values
+            show: If True, display the plot. Default True.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object, or None if insufficient data
+        """
         corr_matrix = self.get_correlation_matrix(method=method)
 
         if corr_matrix.empty:
-            print("Not enough numeric columns for correlation analysis.")
-            return
+            logger.warning("Not enough numeric columns for correlation analysis")
+            return None
 
         fig, ax = plt.subplots(figsize=figsize)
         sns.heatmap(corr_matrix, annot=annot, cmap='coolwarm', center=0,
                     square=True, linewidths=1, ax=ax, fmt='.2f')
         ax.set_title(f'Correlation Heatmap ({method.capitalize()})')
         plt.tight_layout()
-        plt.show()
 
-    def plot_distributions(self, columns: Optional[List[str]] = None, figsize: tuple = (15, 10)):
-        """Plot distributions for numeric columns."""
+        if show:
+            plt.show()
+
+        return fig
+
+    def plot_distributions(self, columns: Optional[List[str]] = None, figsize: tuple = (15, 10),
+                          show: bool = True):
+        """
+        Plot distributions for numeric columns.
+
+        Args:
+            columns: List of columns to plot. If None, plots all numeric columns.
+            figsize: Figure size as (width, height)
+            show: If True, display the plot. Default True.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object, or None if no columns to plot
+        """
         if columns is None:
             columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
 
         if not columns:
-            print("No numeric columns to plot.")
-            return
+            logger.warning("No numeric columns to plot")
+            return None
 
         n_cols = min(3, len(columns))
         n_rows = (len(columns) + n_cols - 1) // n_cols
@@ -214,11 +280,16 @@ class DataAnalyzer:
                 axes[idx].set_xlabel(col)
                 axes[idx].set_ylabel('Frequency')
 
+        # Remove empty subplots
         for idx in range(len(columns), len(axes)):
             fig.delaxes(axes[idx])
 
         plt.tight_layout()
-        plt.show()
+
+        if show:
+            plt.show()
+
+        return fig
 
 
 def quick_analysis(df: pd.DataFrame) -> None:

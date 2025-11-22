@@ -34,6 +34,59 @@ cd feature_engineering_tk
 pip install -e ".[dev]"
 ```
 
+## Breaking Changes (v2.0.0)
+
+**Version 2.0.0 introduces important breaking changes. Please review carefully before upgrading.**
+
+### Inplace Parameter Default Changed
+
+The `inplace` parameter default has changed from `True` to `False` for all methods in `DataPreprocessor` and `FeatureEngineer`. This aligns with pandas conventions and prevents accidental data mutations.
+
+**Before (v1.x):**
+```python
+preprocessor = DataPreprocessor(df)
+preprocessor.handle_missing_values(strategy='mean')  # Modified internal df by default
+cleaned_df = preprocessor.get_dataframe()
+```
+
+**After (v2.0.0):**
+```python
+preprocessor = DataPreprocessor(df)
+
+# Option 1: Explicitly use inplace=True (old behavior)
+preprocessor.handle_missing_values(strategy='mean', inplace=True)
+cleaned_df = preprocessor.get_dataframe()
+
+# Option 2: Capture returned DataFrame (recommended)
+cleaned_df = preprocessor.handle_missing_values(strategy='mean', inplace=False)
+```
+
+**Migration Guide:**
+
+If you were relying on the implicit `inplace=True` behavior, you have two options:
+
+1. **Add `inplace=True` to all method calls** (quick fix):
+   ```python
+   preprocessor.handle_missing_values(strategy='mean', inplace=True)
+   preprocessor.remove_duplicates(inplace=True)
+   ```
+
+2. **Refactor to use returned DataFrames** (recommended, more pandas-like):
+   ```python
+   df = preprocessor.handle_missing_values(strategy='mean')
+   df = preprocessor.remove_duplicates()
+   ```
+
+**Affected Classes:**
+- `DataPreprocessor` - All transformation methods
+- `FeatureEngineer` - All encoding, scaling, and feature creation methods
+
+**Not Affected:**
+- `DataAnalyzer` - Read-only, no inplace operations
+- `FeatureSelector` - Uses different pattern with `apply_selection()`
+
+See [CHANGELOG.md](CHANGELOG.md) for full list of changes.
+
 ## Modules
 
 - **data_analysis.py**: Exploratory data analysis and visualization

@@ -121,32 +121,34 @@ class TestDataPreprocessor:
 
         preprocessor = DataPreprocessor(df)
 
-        # Should not crash with division by zero
+        # Should not crash with division by zero (lower threshold to actually detect outlier)
         result = preprocessor.handle_outliers(
             columns=['constant', 'variable'],
             method='zscore',
             action='remove',
+            threshold=1.5,  # Threshold to catch 100 as outlier (z-score ~1.97)
             inplace=False
         )
 
         # Constant column should be skipped, variable column processed
         assert 'constant' in result.columns
-        assert len(result) < len(df)  # Some outliers should be removed from variable
+        assert len(result) < len(df)  # Outlier 100 should be removed from variable
 
     def test_input_validation(self, sample_df):
         """Test input validation for various methods."""
         preprocessor = DataPreprocessor(sample_df)
 
-        # Invalid strategy
-        with pytest.raises(ValueError):
+        # Invalid strategy - now raises InvalidStrategyError
+        from feature_engineering_tk import InvalidStrategyError, InvalidMethodError
+        with pytest.raises(InvalidStrategyError):
             preprocessor.handle_missing_values(strategy='invalid')
 
         # Invalid keep parameter
         with pytest.raises(ValueError):
             preprocessor.remove_duplicates(keep='invalid')
 
-        # Invalid method for handle_outliers
-        with pytest.raises(ValueError):
+        # Invalid method for handle_outliers - now raises InvalidMethodError
+        with pytest.raises(InvalidMethodError):
             preprocessor.handle_outliers(columns=['numeric1'], method='invalid')
 
 

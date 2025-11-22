@@ -7,6 +7,8 @@ Tests that plotting methods return figure objects and handle edge cases.
 import pytest
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for testing
 import matplotlib.pyplot as plt
 from feature_engineering_tk import DataAnalyzer
 

@@ -64,9 +64,10 @@ class TestFeatureEngineer:
 
         engineer.scale_features(['numeric1', 'numeric2'], method='standard', inplace=True)
 
-        # Should be scaled (mean ~0, std ~1)
+        # Should be scaled (mean ~0, std ~1) - using ddof=0 for consistency with sklearn
         assert abs(engineer.df['numeric1'].mean()) < 1e-10
-        assert abs(engineer.df['numeric1'].std() - 1.0) < 1e-10
+        # sklearn StandardScaler uses ddof=0, pandas uses ddof=1 by default
+        assert abs(engineer.df['numeric1'].std(ddof=0) - 1.0) < 1e-10
         assert 'standard_scaler' in engineer.scalers
 
     def test_scale_features_not_inplace(self, sample_df):
@@ -153,17 +154,19 @@ class TestFeatureEngineer:
 
     def test_save_transformers_without_fitting(self, sample_df):
         """Test that saving without fitting raises error."""
+        from feature_engineering_tk import TransformerNotFittedError
         engineer = FeatureEngineer(sample_df)
 
         with tempfile.NamedTemporaryFile(suffix='.joblib') as tmp:
-            with pytest.raises(ValueError, match="No transformers to save"):
+            with pytest.raises(TransformerNotFittedError):
                 engineer.save_transformers(tmp.name)
 
     def test_input_validation_scale_method(self, sample_df):
         """Test input validation for scaling method."""
+        from feature_engineering_tk import InvalidMethodError
         engineer = FeatureEngineer(sample_df)
 
-        with pytest.raises(ValueError, match="method must be one of"):
+        with pytest.raises(InvalidMethodError):
             engineer.scale_features(['numeric1'], method='invalid')
 
     def test_input_validation_polynomial_degree(self, sample_df):

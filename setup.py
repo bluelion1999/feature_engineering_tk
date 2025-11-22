@@ -10,7 +10,7 @@ long_description = (this_directory / "README.md").read_text(encoding='utf-8')
 
 setup(
     name='feature-engineering-tk',
-    version='1.0.0',
+    version='2.0.0',
     author='bluelion1999',
     author_email='',
     description='A comprehensive Python toolkit for feature engineering and data analysis',

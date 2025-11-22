@@ -4,34 +4,8 @@ A comprehensive Python toolkit for feature engineering and rudimentary data anal
 
 ## Installation
 
-### Install from GitHub
-
-```bash
-pip install git+https://github.com/bluelion1999/feature_engineering_tk.git
-```
-
-### Install from PyPI (coming soon)
-
 ```bash
 pip install feature-engineering-tk
-```
-
-### Install from source
-
-```bash
-git clone https://github.com/bluelion1999/feature_engineering_tk.git
-cd feature_engineering_tk
-pip install -e .
-```
-
-### Development Installation
-
-For development with additional tools:
-
-```bash
-git clone https://github.com/bluelion1999/feature_engineering_tk.git
-cd feature_engineering_tk
-pip install -e ".[dev]"
 ```
 
 ## Breaking Changes (v2.0.0)

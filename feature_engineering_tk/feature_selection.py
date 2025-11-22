@@ -1,11 +1,15 @@
 import pandas as pd
 import numpy as np
+import logging
 from sklearn.feature_selection import (
     SelectKBest, f_classif, f_regression, mutual_info_classif,
     mutual_info_regression, chi2, VarianceThreshold
 )
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from typing import List, Optional, Union
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class FeatureSelector:
@@ -29,7 +33,7 @@ class FeatureSelector:
         feature_cols = [col for col in numeric_cols if col not in exclude_columns]
 
         if not feature_cols:
-            print("No numeric features available for variance-based selection.")
+            logger.warning("No numeric features available for variance-based selection")
             return []
 
         selector = VarianceThreshold(threshold=threshold)
@@ -57,7 +61,7 @@ class FeatureSelector:
         feature_cols = [col for col in numeric_cols if col not in exclude_columns]
 
         if len(feature_cols) < 2:
-            print("Not enough features for correlation-based selection.")
+            logger.warning("Not enough features for correlation-based selection")
             return feature_cols
 
         corr_matrix = self.df[feature_cols].corr(method=method).abs()
@@ -92,7 +96,7 @@ class FeatureSelector:
         feature_cols = [col for col in numeric_cols if col not in exclude_columns]
 
         if not feature_cols:
-            print("No numeric features available for correlation-based selection.")
+            logger.warning("No numeric features available for correlation-based selection")
             return []
 
         correlations = self.df[feature_cols].corrwith(self.df[self.target_column], method=method).abs()
@@ -125,7 +129,7 @@ class FeatureSelector:
         feature_cols = [col for col in numeric_cols if col not in exclude_columns]
 
         if not feature_cols:
-            print("No numeric features available for statistical test selection.")
+            logger.warning("No numeric features available for statistical test selection")
             return []
 
         X = self.df[feature_cols]
@@ -161,7 +165,7 @@ class FeatureSelector:
             return selected
 
         except Exception as e:
-            print(f"Error during feature selection: {e}")
+            logger.error(f"Error during feature selection: {e}")
             return []
 
     def select_by_importance(self, k: int = 10,
@@ -185,7 +189,7 @@ class FeatureSelector:
         feature_cols = [col for col in numeric_cols if col not in exclude_columns]
 
         if not feature_cols:
-            print("No numeric features available for importance-based selection.")
+            logger.warning("No numeric features available for importance-based selection")
             return []
 
         X = self.df[feature_cols]
@@ -210,7 +214,7 @@ class FeatureSelector:
             return selected
 
         except Exception as e:
-            print(f"Error during importance-based selection: {e}")
+            logger.error(f"Error during importance-based selection: {e}")
             return []
 
     def select_by_missing_values(self, threshold: float = 0.5,
@@ -235,7 +239,7 @@ class FeatureSelector:
     def get_feature_importance_df(self, sort: bool = True) -> pd.DataFrame:
         """Get a dataframe of feature scores from the last selection method."""
         if not self.feature_scores:
-            print("No feature scores available. Run a selection method first.")
+            logger.warning("No feature scores available. Run a selection method first")
             return pd.DataFrame()
 
         latest_score_type = list(self.feature_scores.keys())[-1]
@@ -259,7 +263,7 @@ class FeatureSelector:
             selected_features = self.selected_features
 
         if not selected_features:
-            print("No features selected. Returning original dataframe.")
+            logger.warning("No features selected. Returning original dataframe")
             return self.df.copy()
 
         cols_to_keep = selected_features.copy()

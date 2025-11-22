@@ -21,9 +21,7 @@ setup(
         'Bug Tracker': 'https://github.com/bluelion1999/feature_engineering_tk/issues',
         'Source Code': 'https://github.com/bluelion1999/feature_engineering_tk',
     },
-    packages=['feature_engineering_tk'],
-    package_dir={'feature_engineering_tk': '.'},
-    py_modules=[],
+    packages=find_packages(exclude=['tests', 'tests.*']),
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

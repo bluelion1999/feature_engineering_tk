@@ -696,3 +696,162 @@ class TestPhase2to4Integration:
         vif = analyzer.calculate_vif()
         recommendations = analyzer.generate_recommendations()
         assert len(recommendations) > 0
+
+
+# =======================
+# Phase 5: Report Generation Tests
+# =======================
+
+class TestPhase5ReportGeneration:
+    """Test Phase 5 report generation and export features."""
+
+    def test_generate_full_report_classification(self, classification_df):
+        """Test generating full report for classification task."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        report = analyzer.generate_full_report()
+
+        # Check report structure
+        assert isinstance(report, dict)
+        assert report['task'] == 'classification'
+        assert 'timestamp' in report
+        assert 'task_info' in report
+        assert 'distribution' in report
+        assert 'imbalance' in report
+        assert 'relationships' in report
+        assert 'class_stats' in report
+        assert 'mutual_info' in report
+        assert 'data_quality' in report
+        assert 'vif' in report
+        assert 'recommendations' in report
+
+        # Check task info
+        task_info = report['task_info']
+        assert task_info['task'] == 'classification'
+        assert 'target_column' in task_info
+        assert 'unique_values' in task_info
+        assert 'classes' in task_info
+        assert 'class_count' in task_info
+
+    def test_generate_full_report_regression(self, regression_df):
+        """Test generating full report for regression task."""
+        analyzer = TargetAnalyzer(regression_df, 'target')
+        report = analyzer.generate_full_report()
+
+        # Check report structure
+        assert isinstance(report, dict)
+        assert report['task'] == 'regression'
+        assert 'timestamp' in report
+        assert 'task_info' in report
+        assert 'distribution' in report
+        assert 'correlations' in report
+        assert 'relationships' in report
+        assert 'mutual_info' in report
+        assert 'data_quality' in report
+        assert 'vif' in report
+        assert 'recommendations' in report
+
+    def test_export_report_json(self, classification_df, tmp_path):
+        """Test exporting report as JSON."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        filepath = tmp_path / "report.json"
+
+        analyzer.export_report(str(filepath), format='json')
+
+        # Check file was created
+        assert filepath.exists()
+
+        # Check JSON is valid
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+
+        assert isinstance(data, dict)
+        assert data['task'] == 'classification'
+        assert 'timestamp' in data
+
+    def test_export_report_markdown(self, regression_df, tmp_path):
+        """Test exporting report as Markdown."""
+        analyzer = TargetAnalyzer(regression_df, 'target')
+        filepath = tmp_path / "report.md"
+
+        analyzer.export_report(str(filepath), format='markdown')
+
+        # Check file was created
+        assert filepath.exists()
+
+        # Check markdown content
+        with open(filepath, 'r') as f:
+            content = f.read()
+
+        assert '# Target Analysis Report' in content
+        assert '## Task Information' in content
+        assert 'regression' in content.lower()
+        assert '## Distribution Analysis' in content
+
+    def test_export_report_html(self, classification_df, tmp_path):
+        """Test exporting report as HTML."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        filepath = tmp_path / "report.html"
+
+        analyzer.export_report(str(filepath), format='html')
+
+        # Check file was created
+        assert filepath.exists()
+
+        # Check HTML content
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        assert '<html>' in content
+        assert '<title>Target Analysis Report</title>' in content
+        assert '<h1>Target Analysis Report</h1>' in content
+        assert 'classification' in content.lower()
+
+    def test_export_report_invalid_format(self, classification_df, tmp_path):
+        """Test that invalid format raises error."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        filepath = tmp_path / "report.txt"
+
+        with pytest.raises(ValueError, match="Format must be"):
+            analyzer.export_report(str(filepath), format='invalid')
+
+    def test_report_includes_all_analyses(self, classification_df):
+        """Test that report includes results from all analysis methods."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        report = analyzer.generate_full_report()
+
+        # Verify all sections are present with data
+        assert len(report['distribution']) > 0
+        assert len(report['relationships']) > 0
+        assert len(report['mutual_info']) > 0
+        assert isinstance(report['data_quality'], dict)
+        assert len(report['recommendations']) > 0
+
+    def test_html_export_includes_css(self, classification_df, tmp_path):
+        """Test that HTML export includes embedded CSS styling."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        filepath = tmp_path / "report.html"
+
+        analyzer.export_report(str(filepath), format='html')
+
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for CSS styling
+        assert '<style>' in content
+        assert 'font-family' in content
+        assert 'table' in content
+
+    def test_markdown_export_includes_tables(self, regression_df, tmp_path):
+        """Test that Markdown export includes properly formatted tables."""
+        analyzer = TargetAnalyzer(regression_df, 'target')
+        filepath = tmp_path / "report.md"
+
+        analyzer.export_report(str(filepath), format='markdown')
+
+        with open(filepath, 'r') as f:
+            content = f.read()
+
+        # Check for markdown tables
+        assert '|' in content  # Table delimiter
+        assert '---' in content  # Table header separator

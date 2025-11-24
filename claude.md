@@ -13,9 +13,17 @@
 
 ---
 
-## Recent Major Refactoring (2025-11-22)
+## Recent Major Changes
 
-### Critical Fixes
+### Architecture Refactoring (2025-11-24)
+1. **VIF Relocation**: Moved `calculate_vif()` from TargetAnalyzer to DataAnalyzer
+   - VIF is target-independent multicollinearity detection
+   - TargetAnalyzer now delegates to DataAnalyzer (auto-excludes target column)
+   - Improved separation of concerns: general EDA vs target-specific analysis
+
+### Major Refactoring (2025-11-22)
+
+#### Critical Fixes
 1. **Package Structure**: Fixed broken structure - moved all modules to `feature_engineering_tk/` directory
 2. **Inplace Bugs** (9 methods): Fixed methods not updating `self.df` when `inplace=True`
 3. **Division by Zero**: Added checks in z-score outlier detection
@@ -46,10 +54,11 @@ mltoolkit/
 │   ├── preprocessing.py       # Data cleaning
 │   ├── feature_selection.py   # Feature selection
 │   └── exceptions.py          # Custom exceptions
-├── tests/                     # Test suite (43 tests)
+├── tests/                     # Test suite (131 tests)
 │   ├── test_preprocessing.py
 │   ├── test_feature_engineering.py
 │   ├── test_data_analysis.py
+│   ├── test_target_analyzer.py  # NEW: Phase 1 TargetAnalyzer tests
 │   ├── test_exceptions.py
 │   └── test_plotting.py
 ├── setup.py
@@ -144,13 +153,118 @@ if not columns:
 ## Module Details
 
 ### data_analysis.py
-**Class**: `DataAnalyzer` (read-only, no inplace operations)
+**Classes**: `DataAnalyzer`, `TargetAnalyzer` (read-only, no inplace operations)
 
-**Key Features**:
+**DataAnalyzer - Key Features**:
 - Basic info, missing value analysis
 - Outlier detection (IQR, Z-score with division-by-zero protection)
-- Correlation analysis
+- Correlation analysis (Pearson, Spearman)
+- **VIF calculation** for multicollinearity detection (VIF > 10 = high collinearity)
+- Cardinality analysis
 - Plotting methods that return `Figure` objects
+
+**TargetAnalyzer - Phases 1-5, 7-8 Complete**:
+**State**: `self.task` (auto-detected or specified), `self._analysis_cache` (dict)
+
+**Phase 1 - Core Infrastructure**:
+- Auto task detection (classification vs regression)
+- Classification: class distribution, imbalance analysis, severity levels
+- Regression: comprehensive stats (mean, median, skewness, kurtosis, normality tests)
+- Basic plotting methods (class/target distributions, Q-Q plots)
+- Caching mechanism
+
+**Phase 2 - Classification Statistical Tests**:
+- Feature-target relationship analysis (Chi-square, ANOVA F-test)
+- Class-wise feature statistics (mean, median, std per class)
+- Feature distribution plotting by class (box, violin, histogram)
+
+**Phase 3 - Regression Analysis**:
+- Correlation analysis (Pearson, Spearman)
+- Mutual information scores (classification and regression)
+- Scatter plots with regression lines
+- Residual analysis (MAE, RMSE, R², normality tests)
+- Residual plots (residuals vs predicted, Q-Q plot)
+
+**Phase 4 - Data Quality & Recommendations**:
+- Comprehensive data quality checks (missing values, constant features)
+- Potential data leakage detection (perfect correlations, suspicious p-values)
+- Multicollinearity detection (`calculate_vif()` - delegates to DataAnalyzer, auto-excludes target)
+- Actionable recommendation engine with severity levels
+
+**Phase 5 - Report Generation & Export**:
+- `generate_full_report()`: Structured dict with all analyses (distribution, relationships, MI, quality, VIF, recommendations)
+- `export_report()`: Multi-format export (HTML with CSS, Markdown with tables, JSON)
+- Comprehensive reports combining all Phase 1-4 analyses in user-friendly formats
+
+**Phase 7 - Feature Engineering Suggestions**:
+- `suggest_feature_engineering()`: Intelligent recommendations for feature transformations
+- Skewness-based transform suggestions (log, sqrt, polynomial)
+- Categorical encoding strategies (one-hot, target, ordinal based on cardinality)
+- Scaling recommendations based on value ranges
+- Non-linear relationship detection (polynomial features)
+- Interaction term suggestions for correlated features
+- Missing value indicator recommendations
+- Priority-sorted actionable suggestions (high/medium/low)
+
+**Phase 8 - Model Recommendations**:
+- `recommend_models()`: ML algorithm suggestions based on data characteristics
+- Classification: handles imbalance, dimensionality, binary/multiclass
+- Regression: considers outliers, target distribution, feature relationships
+- Dataset size awareness (small/medium/large)
+- Model-specific considerations and tuning guidance
+- Priority-sorted recommendations (Random Forest, XGBoost, LightGBM, Linear models, Neural Networks)
+- Practical guidance on model selection and hyperparameter tuning
+
+**Usage Pattern**:
+```python
+# Initialize
+analyzer = TargetAnalyzer(df, target_column='target', task='auto')
+
+# Phase 1: Basic analysis
+dist = analyzer.analyze_class_distribution()
+imbalance = analyzer.get_class_imbalance_info()
+
+# Phase 2: Feature relationships
+relationships = analyzer.analyze_feature_target_relationship()
+class_stats = analyzer.analyze_class_wise_statistics()
+fig = analyzer.plot_feature_by_class('feature1', plot_type='box', show=False)
+
+# Phase 3: Correlations & MI
+correlations = analyzer.analyze_feature_correlations(method='pearson')
+mi_scores = analyzer.analyze_mutual_information()
+fig = analyzer.plot_feature_vs_target(max_features=6, show=False)
+
+# Residual analysis (with predictions)
+residuals = analyzer.analyze_residuals(predictions)
+fig = analyzer.plot_residuals(predictions, show=False)
+
+# Phase 4: Data quality
+quality = analyzer.analyze_data_quality()
+vif = analyzer.calculate_vif()
+recommendations = analyzer.generate_recommendations()
+
+# Phase 5: Report generation and export
+report_dict = analyzer.generate_full_report()  # Structured dict with all analyses
+analyzer.export_report('analysis_report.html', format='html')  # HTML with CSS
+analyzer.export_report('analysis_report.md', format='markdown')  # Markdown with tables
+analyzer.export_report('analysis_report.json', format='json')  # JSON for programmatic use
+
+# Phase 7: Feature engineering suggestions
+suggestions = analyzer.suggest_feature_engineering()
+for sugg in suggestions:
+    print(f"{sugg['priority'].upper()}: {sugg['feature']} - {sugg['suggestion']}")
+    print(f"  Reason: {sugg['reason']}")
+
+# Phase 8: Model recommendations
+model_recs = analyzer.recommend_models()
+for rec in model_recs:
+    print(f"{rec['priority'].upper()}: {rec['model']}")
+    print(f"  Why: {rec['reason']}")
+    print(f"  Note: {rec['considerations']}")
+
+# Legacy: Quick summary report (Phase 1)
+report = analyzer.generate_summary_report()
+```
 
 **Helper**: `quick_analysis(df)` - prints formatted analysis
 
@@ -248,10 +362,11 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 
 ## Testing
 
-**43 tests** across 5 test files:
+**130+ tests** across 6 test files:
 - `test_preprocessing.py`: 12 tests (inplace bugs, deprecated methods, div-by-zero)
 - `test_feature_engineering.py`: 13 tests (inplace bugs, transformer persistence)
-- `test_data_analysis.py`: 6 tests (div-by-zero protection)
+- `test_data_analysis.py`: 8 tests (div-by-zero protection, VIF calculation in DataAnalyzer)
+- `test_target_analyzer.py`: 87 tests (Phases 1-5,7-8: task detection, statistical tests, correlations, MI, VIF delegation, data quality, recommendations, report generation, feature engineering suggestions, model recommendations, integration tests)
 - `test_exceptions.py`: 4 tests (custom exception messages)
 - `test_plotting.py`: 8 tests (figure returns, save capability)
 
@@ -273,6 +388,7 @@ scikit-learn>=1.2.0
 scipy>=1.9.0
 matplotlib>=3.6.0
 seaborn>=0.12.0
+statsmodels>=0.14.0  # NEW: for VIF calculation in TargetAnalyzer
 ```
 
 Dev dependencies: pytest, pytest-cov, black, flake8, mypy

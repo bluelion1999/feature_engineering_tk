@@ -85,6 +85,35 @@ class TestDataAnalyzer:
         # Should return DataFrame
         assert isinstance(high_corr, pd.DataFrame)
 
+    def test_calculate_vif(self):
+        """Test VIF calculation in DataAnalyzer."""
+        # Create dataset with known multicollinearity
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(100),
+            'feature2': np.random.randn(100),
+        })
+        # Create highly correlated feature
+        df['feature3'] = df['feature1'] * 0.9 + np.random.randn(100) * 0.1
+
+        analyzer = DataAnalyzer(df)
+        vif_df = analyzer.calculate_vif()
+
+        # Should return DataFrame with VIF values
+        assert not vif_df.empty
+        assert 'feature' in vif_df.columns
+        assert 'VIF' in vif_df.columns
+        assert len(vif_df) == 3  # All three features
+
+    def test_calculate_vif_insufficient_columns(self):
+        """Test VIF with insufficient columns."""
+        df = pd.DataFrame({'single_col': [1, 2, 3, 4, 5]})
+        analyzer = DataAnalyzer(df)
+        vif_df = analyzer.calculate_vif()
+
+        # Should return empty DataFrame
+        assert vif_df.empty
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

@@ -13,9 +13,17 @@
 
 ---
 
-## Recent Major Refactoring (2025-11-22)
+## Recent Major Changes
 
-### Critical Fixes
+### Architecture Refactoring (2025-11-24)
+1. **VIF Relocation**: Moved `calculate_vif()` from TargetAnalyzer to DataAnalyzer
+   - VIF is target-independent multicollinearity detection
+   - TargetAnalyzer now delegates to DataAnalyzer (auto-excludes target column)
+   - Improved separation of concerns: general EDA vs target-specific analysis
+
+### Major Refactoring (2025-11-22)
+
+#### Critical Fixes
 1. **Package Structure**: Fixed broken structure - moved all modules to `feature_engineering_tk/` directory
 2. **Inplace Bugs** (9 methods): Fixed methods not updating `self.df` when `inplace=True`
 3. **Division by Zero**: Added checks in z-score outlier detection
@@ -46,7 +54,7 @@ mltoolkit/
 │   ├── preprocessing.py       # Data cleaning
 │   ├── feature_selection.py   # Feature selection
 │   └── exceptions.py          # Custom exceptions
-├── tests/                     # Test suite (129 tests)
+├── tests/                     # Test suite (131 tests)
 │   ├── test_preprocessing.py
 │   ├── test_feature_engineering.py
 │   ├── test_data_analysis.py
@@ -150,7 +158,9 @@ if not columns:
 **DataAnalyzer - Key Features**:
 - Basic info, missing value analysis
 - Outlier detection (IQR, Z-score with division-by-zero protection)
-- Correlation analysis
+- Correlation analysis (Pearson, Spearman)
+- **VIF calculation** for multicollinearity detection (VIF > 10 = high collinearity)
+- Cardinality analysis
 - Plotting methods that return `Figure` objects
 
 **TargetAnalyzer - Phases 1-5, 7-8 Complete**:
@@ -178,7 +188,7 @@ if not columns:
 **Phase 4 - Data Quality & Recommendations**:
 - Comprehensive data quality checks (missing values, constant features)
 - Potential data leakage detection (perfect correlations, suspicious p-values)
-- Multicollinearity detection (VIF calculation)
+- Multicollinearity detection (`calculate_vif()` - delegates to DataAnalyzer, auto-excludes target)
 - Actionable recommendation engine with severity levels
 
 **Phase 5 - Report Generation & Export**:
@@ -352,11 +362,11 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 
 ## Testing
 
-**100+ tests** across 6 test files:
+**130+ tests** across 6 test files:
 - `test_preprocessing.py`: 12 tests (inplace bugs, deprecated methods, div-by-zero)
 - `test_feature_engineering.py`: 13 tests (inplace bugs, transformer persistence)
-- `test_data_analysis.py`: 6 tests (div-by-zero protection)
-- `test_target_analyzer.py`: 87 tests (Phases 1-5,7-8: task detection, statistical tests, correlations, MI, VIF, data quality, recommendations, report generation, feature engineering suggestions, model recommendations, integration tests)
+- `test_data_analysis.py`: 8 tests (div-by-zero protection, VIF calculation in DataAnalyzer)
+- `test_target_analyzer.py`: 87 tests (Phases 1-5,7-8: task detection, statistical tests, correlations, MI, VIF delegation, data quality, recommendations, report generation, feature engineering suggestions, model recommendations, integration tests)
 - `test_exceptions.py`: 4 tests (custom exception messages)
 - `test_plotting.py`: 8 tests (figure returns, save capability)
 

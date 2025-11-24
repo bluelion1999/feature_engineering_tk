@@ -191,6 +191,58 @@ class DataAnalyzer:
         df_cardinality = pd.DataFrame(cardinality)
         return df_cardinality.sort_values('unique_count', ascending=False).reset_index(drop=True)
 
+    def calculate_vif(self, columns: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Calculate Variance Inflation Factor (VIF) for multicollinearity detection.
+
+        VIF measures how much the variance of a regression coefficient is inflated
+        due to multicollinearity. Values > 10 indicate high multicollinearity.
+
+        Args:
+            columns: List of numeric columns to analyze. If None, uses all numeric columns.
+
+        Returns:
+            DataFrame with columns: feature, VIF (sorted by VIF descending)
+            Returns empty DataFrame if insufficient columns or calculation fails.
+
+        Note:
+            - VIF > 10: High multicollinearity (consider removing feature)
+            - VIF > 5: Moderate multicollinearity
+            - VIF < 5: Low multicollinearity
+        """
+        if columns is None:
+            columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+
+        if len(columns) < 2:
+            logger.warning("Need at least 2 numeric columns for VIF calculation")
+            return pd.DataFrame()
+
+        # Prepare data
+        df_vif = self.df[columns].fillna(self.df[columns].mean())
+
+        # Remove constant columns
+        df_vif = df_vif.loc[:, df_vif.std() > 0]
+
+        if df_vif.shape[1] < 2:
+            logger.warning("Insufficient non-constant features for VIF calculation")
+            return pd.DataFrame()
+
+        try:
+            vif_data = []
+            for i, col in enumerate(df_vif.columns):
+                vif = variance_inflation_factor(df_vif.values, i)
+                vif_data.append({'feature': col, 'VIF': vif})
+
+            vif_df = pd.DataFrame(vif_data)
+            vif_df = vif_df.sort_values('VIF', ascending=False)
+
+            logger.info(f"Calculated VIF for {len(vif_df)} features")
+            return vif_df
+
+        except Exception as e:
+            logger.warning(f"Could not calculate VIF: {e}")
+            return pd.DataFrame()
+
     def plot_missing_values(self, figsize: tuple = (12, 6), show: bool = True):
         """
         Visualize missing values.
@@ -1226,44 +1278,26 @@ class TargetAnalyzer:
         """
         Calculate Variance Inflation Factor for multicollinearity detection.
 
+        Wrapper around DataAnalyzer.calculate_vif() that automatically excludes the target column.
+
         Args:
-            feature_columns: List of numeric features. If None, uses all numeric columns.
+            feature_columns: List of numeric features. If None, uses all numeric columns
+                           (excluding target).
 
         Returns:
-            DataFrame with columns: feature, VIF
+            DataFrame with columns: feature, VIF (sorted by VIF descending)
+
+        Note:
+            This delegates to DataAnalyzer.calculate_vif() but excludes the target column.
+            For general VIF calculation without a target, use DataAnalyzer directly.
         """
         if feature_columns is None:
             feature_columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
             feature_columns = [col for col in feature_columns if col != self.target_column]
 
-        if len(feature_columns) < 2:
-            logger.warning("Need at least 2 features for VIF calculation")
-            return pd.DataFrame()
-
-        # Prepare data
-        df_vif = self.df[feature_columns].fillna(self.df[feature_columns].mean())
-
-        # Remove constant columns
-        df_vif = df_vif.loc[:, df_vif.std() > 0]
-
-        if df_vif.shape[1] < 2:
-            logger.warning("Insufficient non-constant features for VIF calculation")
-            return pd.DataFrame()
-
-        try:
-            vif_data = []
-            for i, col in enumerate(df_vif.columns):
-                vif = variance_inflation_factor(df_vif.values, i)
-                vif_data.append({'feature': col, 'VIF': vif})
-
-            vif_df = pd.DataFrame(vif_data)
-            vif_df = vif_df.sort_values('VIF', ascending=False)
-
-            return vif_df
-
-        except Exception as e:
-            logger.warning(f"Could not calculate VIF: {e}")
-            return pd.DataFrame()
+        # Delegate to DataAnalyzer implementation
+        analyzer = DataAnalyzer(self.df)
+        return analyzer.calculate_vif(columns=feature_columns)
 
     def generate_recommendations(self) -> List[str]:
         """

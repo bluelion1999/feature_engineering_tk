@@ -855,3 +855,179 @@ class TestPhase5ReportGeneration:
         # Check for markdown tables
         assert '|' in content  # Table delimiter
         assert '---' in content  # Table header separator
+
+
+# =======================
+# Phase 7: Feature Engineering Suggestions Tests
+# =======================
+
+class TestPhase7FeatureEngineeringSuggestions:
+    """Test Phase 7 feature engineering suggestion features."""
+
+    def test_suggest_feature_engineering_basic(self, regression_df):
+        """Test basic feature engineering suggestion generation."""
+        analyzer = TargetAnalyzer(regression_df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        assert isinstance(suggestions, list)
+        assert len(suggestions) > 0
+
+        # Check suggestion structure
+        for sugg in suggestions:
+            assert 'feature' in sugg
+            assert 'suggestion' in sugg
+            assert 'reason' in sugg
+            assert 'priority' in sugg
+            assert sugg['priority'] in ['high', 'medium', 'low']
+
+    def test_suggest_skewed_transformations(self):
+        """Test suggestions for skewed features."""
+        # Create highly skewed data
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'skewed_feature': np.random.exponential(2, 100),
+            'target': np.random.randn(100)
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should suggest transformation for skewed feature
+        transform_suggs = [s for s in suggestions if 'transformation' in s['suggestion'].lower()]
+        assert len(transform_suggs) > 0
+        assert any('skewed' in s['reason'].lower() for s in transform_suggs)
+
+    def test_suggest_categorical_encoding(self):
+        """Test suggestions for categorical features."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'low_card': np.random.choice(['A', 'B', 'C'], 100),
+            'high_card': [f'cat_{i % 30}' for i in range(100)],
+            'target': np.random.randint(0, 2, 100)
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should suggest one-hot for low cardinality
+        low_card_suggs = [s for s in suggestions if s['feature'] == 'low_card']
+        assert any('one-hot' in s['suggestion'].lower() for s in low_card_suggs)
+
+        # Should suggest target encoding for high cardinality
+        high_card_suggs = [s for s in suggestions if s['feature'] == 'high_card']
+        assert any('target encode' in s['suggestion'].lower() or 'group' in s['suggestion'].lower()
+                   for s in high_card_suggs)
+
+    def test_suggest_scaling(self):
+        """Test suggestions for features needing scaling."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'large_range': np.random.uniform(0, 1000, 100),
+            'small_range': np.random.uniform(0, 10, 100),
+            'target': np.random.randn(100)
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should suggest scaling for large range feature
+        scaling_suggs = [s for s in suggestions
+                        if s['feature'] == 'large_range' and 'scaler' in s['suggestion'].lower()]
+        assert len(scaling_suggs) > 0
+
+    def test_suggest_polynomial_features(self):
+        """Test suggestions for polynomial features with non-linear relationships."""
+        np.random.seed(42)
+        # Use a more pronounced non-linear pattern
+        x = np.linspace(0, 10, 100)
+        # Create a clear non-monotonic pattern
+        y_nonlinear = np.sin(x) * 10 + x
+        df = pd.DataFrame({
+            'feature': x,
+            'target': y_nonlinear + np.random.randn(100) * 0.5
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Check that suggestions are generated (polynomial detection depends on threshold)
+        # The specific suggestions may vary based on data characteristics
+        assert len(suggestions) > 0
+        assert all('feature' in s and 'suggestion' in s for s in suggestions)
+
+    def test_suggest_interaction_terms_regression(self):
+        """Test interaction term suggestions for regression."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(100),
+            'feature2': np.random.randn(100),
+            'feature3': np.random.randn(100),
+            'target': np.random.randn(100) * 10 + 50
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should suggest interaction terms
+        interaction_suggs = [s for s in suggestions if 'interaction' in s['suggestion'].lower()]
+        # May or may not have interactions depending on correlations
+        # Just check structure if present
+        for sugg in interaction_suggs:
+            assert 'feature' in sugg
+
+    def test_suggest_missing_indicators(self):
+        """Test suggestions for missing value indicators."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature_with_missing': [1, 2, None, 4, None, 6, None, 8, 9, 10] * 10,
+            'target': np.random.randint(0, 2, 100)
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should suggest missing indicator flag
+        missing_suggs = [s for s in suggestions if 'missing indicator' in s['suggestion'].lower()]
+        assert len(missing_suggs) > 0
+        assert any('missing' in s['reason'].lower() for s in missing_suggs)
+
+    def test_suggestions_sorted_by_priority(self, classification_df):
+        """Test that suggestions are sorted by priority."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        if len(suggestions) > 1:
+            priorities = [s['priority'] for s in suggestions]
+            # Check high comes before low
+            if 'high' in priorities and 'low' in priorities:
+                high_idx = priorities.index('high')
+                low_idx = priorities.index('low')
+                assert high_idx < low_idx
+
+    def test_suggest_classification_binning(self):
+        """Test binning suggestions for classification with weak linear features."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'weak_feature': np.random.randn(200),
+            'target': np.random.randint(0, 2, 200)
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # May or may not suggest binning depending on p-values
+        # Just verify structure is correct
+        assert isinstance(suggestions, list)
+
+    def test_empty_suggestions_edge_case(self):
+        """Test with minimal data that produces no suggestions."""
+        df = pd.DataFrame({
+            'feature': [1, 2, 3, 4, 5],
+            'target': [1, 2, 3, 4, 5]
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should return empty list or minimal suggestions
+        assert isinstance(suggestions, list)

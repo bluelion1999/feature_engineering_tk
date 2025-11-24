@@ -46,7 +46,7 @@ mltoolkit/
 │   ├── preprocessing.py       # Data cleaning
 │   ├── feature_selection.py   # Feature selection
 │   └── exceptions.py          # Custom exceptions
-├── tests/                     # Test suite (109 tests)
+├── tests/                     # Test suite (119 tests)
 │   ├── test_preprocessing.py
 │   ├── test_feature_engineering.py
 │   ├── test_data_analysis.py
@@ -153,7 +153,7 @@ if not columns:
 - Correlation analysis
 - Plotting methods that return `Figure` objects
 
-**TargetAnalyzer - Phases 1-5 Complete**:
+**TargetAnalyzer - Phases 1-5, 7 Complete**:
 **State**: `self.task` (auto-detected or specified), `self._analysis_cache` (dict)
 
 **Phase 1 - Core Infrastructure**:
@@ -185,6 +185,16 @@ if not columns:
 - `generate_full_report()`: Structured dict with all analyses (distribution, relationships, MI, quality, VIF, recommendations)
 - `export_report()`: Multi-format export (HTML with CSS, Markdown with tables, JSON)
 - Comprehensive reports combining all Phase 1-4 analyses in user-friendly formats
+
+**Phase 7 - Feature Engineering Suggestions**:
+- `suggest_feature_engineering()`: Intelligent recommendations for feature transformations
+- Skewness-based transform suggestions (log, sqrt, polynomial)
+- Categorical encoding strategies (one-hot, target, ordinal based on cardinality)
+- Scaling recommendations based on value ranges
+- Non-linear relationship detection (polynomial features)
+- Interaction term suggestions for correlated features
+- Missing value indicator recommendations
+- Priority-sorted actionable suggestions (high/medium/low)
 
 **Usage Pattern**:
 ```python
@@ -219,6 +229,12 @@ report_dict = analyzer.generate_full_report()  # Structured dict with all analys
 analyzer.export_report('analysis_report.html', format='html')  # HTML with CSS
 analyzer.export_report('analysis_report.md', format='markdown')  # Markdown with tables
 analyzer.export_report('analysis_report.json', format='json')  # JSON for programmatic use
+
+# Phase 7: Feature engineering suggestions
+suggestions = analyzer.suggest_feature_engineering()
+for sugg in suggestions:
+    print(f"{sugg['priority'].upper()}: {sugg['feature']} - {sugg['suggestion']}")
+    print(f"  Reason: {sugg['reason']}")
 
 # Legacy: Quick summary report (Phase 1)
 report = analyzer.generate_summary_report()
@@ -324,7 +340,7 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 - `test_preprocessing.py`: 12 tests (inplace bugs, deprecated methods, div-by-zero)
 - `test_feature_engineering.py`: 13 tests (inplace bugs, transformer persistence)
 - `test_data_analysis.py`: 6 tests (div-by-zero protection)
-- `test_target_analyzer.py`: 67 tests (Phases 1-5: task detection, statistical tests, correlations, MI, VIF, data quality, recommendations, report generation, integration tests)
+- `test_target_analyzer.py`: 77 tests (Phases 1-5,7: task detection, statistical tests, correlations, MI, VIF, data quality, recommendations, report generation, feature engineering suggestions, integration tests)
 - `test_exceptions.py`: 4 tests (custom exception messages)
 - `test_plotting.py`: 8 tests (figure returns, save capability)
 

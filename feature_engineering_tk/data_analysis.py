@@ -1639,6 +1639,161 @@ class TargetAnalyzer:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(html)
 
+    # =======================
+    # Phase 7: Feature Engineering Suggestions
+    # =======================
+
+    def suggest_feature_engineering(self) -> List[Dict[str, Any]]:
+        """
+        Analyze features and generate intelligent feature engineering suggestions.
+
+        Provides actionable recommendations for:
+        - Transformations (log, sqrt, polynomial)
+        - Scaling strategies
+        - Encoding approaches for categorical features
+        - Interaction terms
+        - Binning strategies
+
+        Returns:
+            List of dicts with 'feature', 'suggestion', 'reason', and 'priority' keys
+        """
+        suggestions = []
+        features = [col for col in self.df.columns if col != self.target_column]
+        numeric_features = self.df[features].select_dtypes(include=[np.number]).columns.tolist()
+        categorical_features = self.df[features].select_dtypes(exclude=[np.number]).columns.tolist()
+
+        # 1. Analyze numeric features for transformations
+        for feature in numeric_features:
+            col_data = self.df[feature].dropna()
+            if len(col_data) < 10:
+                continue
+
+            # Check skewness
+            skewness = col_data.skew()
+            if abs(skewness) > 1.0:
+                direction = "right" if skewness > 0 else "left"
+                transform = "log or sqrt" if skewness > 0 else "square or exponential"
+                suggestions.append({
+                    'feature': feature,
+                    'suggestion': f'Apply {transform} transformation',
+                    'reason': f'Feature is {direction}-skewed (skewness={skewness:.2f})',
+                    'priority': 'high' if abs(skewness) > 2 else 'medium'
+                })
+
+            # Check for non-linear relationships with target (regression only)
+            if self.task == 'regression' and len(col_data) > 20:
+                # Compare linear vs polynomial correlation
+                target_clean = self.df[self.target_column].loc[col_data.index]
+                linear_corr = abs(np.corrcoef(col_data, target_clean)[0, 1])
+
+                # Create polynomial features
+                col_squared = col_data ** 2
+                poly_corr = abs(np.corrcoef(col_squared, target_clean)[0, 1])
+
+                if poly_corr > linear_corr * 1.2:  # 20% improvement
+                    suggestions.append({
+                        'feature': feature,
+                        'suggestion': 'Create polynomial features (squared, cubed)',
+                        'reason': f'Non-linear relationship detected (poly corr: {poly_corr:.3f} vs linear: {linear_corr:.3f})',
+                        'priority': 'high'
+                    })
+
+            # Check range for scaling recommendation
+            min_val, max_val = col_data.min(), col_data.max()
+            value_range = max_val - min_val
+
+            if value_range > 100:
+                suggestions.append({
+                    'feature': feature,
+                    'suggestion': 'Apply StandardScaler or MinMaxScaler',
+                    'reason': f'Large value range ({min_val:.1f} to {max_val:.1f})',
+                    'priority': 'medium'
+                })
+
+        # 2. Analyze categorical features
+        for feature in categorical_features:
+            col_data = self.df[feature].dropna()
+            if len(col_data) == 0:
+                continue
+
+            cardinality = col_data.nunique()
+
+            # Low cardinality: one-hot encoding
+            if cardinality <= 5:
+                suggestions.append({
+                    'feature': feature,
+                    'suggestion': 'One-hot encode',
+                    'reason': f'Low cardinality ({cardinality} unique values)',
+                    'priority': 'high'
+                })
+            # Medium cardinality: target encoding or ordinal
+            elif cardinality <= 15:
+                suggestions.append({
+                    'feature': feature,
+                    'suggestion': 'Target encode or ordinal encode',
+                    'reason': f'Medium cardinality ({cardinality} unique values)',
+                    'priority': 'medium'
+                })
+            # High cardinality: target encoding or frequency encoding
+            else:
+                suggestions.append({
+                    'feature': feature,
+                    'suggestion': 'Target encode or group rare categories',
+                    'reason': f'High cardinality ({cardinality} unique values)',
+                    'priority': 'high'
+                })
+
+        # 3. Interaction terms (top correlated features)
+        if len(numeric_features) >= 2 and self.task == 'regression':
+            corr_df = self.analyze_feature_correlations(method='pearson')
+            if not corr_df.empty:
+                top_features = corr_df.head(3)['feature'].tolist()
+                if len(top_features) >= 2:
+                    suggestions.append({
+                        'feature': ', '.join(top_features[:2]),
+                        'suggestion': 'Create interaction terms (multiplication, ratios)',
+                        'reason': f'Top features strongly correlated with target',
+                        'priority': 'medium'
+                    })
+
+        # 4. Binning for continuous features with weak linear relationships
+        if self.task == 'classification' and len(numeric_features) > 0:
+            relationships = self.analyze_feature_target_relationship()
+            if not relationships.empty:
+                weak_linear = relationships[
+                    (relationships['test_type'].str.contains('ANOVA', na=False)) &
+                    (relationships['pvalue'] > 0.05)
+                ]['feature'].tolist()
+
+                for feature in weak_linear[:3]:  # Top 3 weak features
+                    suggestions.append({
+                        'feature': feature,
+                        'suggestion': 'Bin into categorical groups',
+                        'reason': 'Weak linear relationship with target - binning may capture non-linear patterns',
+                        'priority': 'low'
+                    })
+
+        # 5. Missing value patterns
+        missing_info = self.df[features].isnull().sum()
+        features_with_missing = missing_info[missing_info > 0].index.tolist()
+
+        for feature in features_with_missing:
+            missing_pct = (missing_info[feature] / len(self.df)) * 100
+            if missing_pct > 5:
+                suggestions.append({
+                    'feature': feature,
+                    'suggestion': f'Create missing indicator flag',
+                    'reason': f'{missing_pct:.1f}% missing - missingness may be informative',
+                    'priority': 'medium' if missing_pct > 20 else 'low'
+                })
+
+        # Sort by priority
+        priority_order = {'high': 0, 'medium': 1, 'low': 2}
+        suggestions.sort(key=lambda x: priority_order[x['priority']])
+
+        logger.info(f"Generated {len(suggestions)} feature engineering suggestions")
+        return suggestions
+
 
 def quick_analysis(df: pd.DataFrame) -> None:
     """Perform a quick comprehensive analysis of a dataframe."""

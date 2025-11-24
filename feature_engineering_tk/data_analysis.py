@@ -3,8 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union, Tuple
 from scipy import stats
+from scipy.stats import chi2_contingency, pointbiserialr, f_oneway, pearsonr, spearmanr
+from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+from sklearn.metrics import r2_score
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -667,6 +671,685 @@ class TargetAnalyzer:
         lines.append("=" * 80)
 
         return "\n".join(lines)
+
+    # ============================================================================
+    # PHASE 2: Classification-Specific Statistical Tests
+    # ============================================================================
+
+    def analyze_feature_target_relationship(self, feature_columns: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Analyze relationship between features and target using appropriate statistical tests.
+
+        For classification:
+        - Chi-square test for categorical features
+        - ANOVA F-test for numeric features
+
+        For regression:
+        - Pearson correlation for numeric features
+        - ANOVA F-test for categorical features
+
+        Args:
+            feature_columns: List of feature columns to analyze. If None, uses all columns except target.
+
+        Returns:
+            DataFrame with columns: feature, test_type, statistic, pvalue, significant (at α=0.05)
+        """
+        if feature_columns is None:
+            feature_columns = [col for col in self.df.columns if col != self.target_column]
+
+        results = []
+        target = self.df[self.target_column].dropna()
+
+        for feature in feature_columns:
+            if feature == self.target_column:
+                continue
+
+            feature_data = self.df[feature].dropna()
+
+            # Skip if too many missing values
+            if len(feature_data) < 10:
+                logger.warning(f"Skipping feature '{feature}' due to insufficient data")
+                continue
+
+            try:
+                if self.task == 'classification':
+                    if pd.api.types.is_numeric_dtype(self.df[feature]):
+                        # ANOVA F-test for numeric feature vs categorical target
+                        groups = [self.df[self.df[self.target_column] == cls][feature].dropna()
+                                  for cls in target.unique()]
+                        groups = [g for g in groups if len(g) > 0]
+                        if len(groups) >= 2:
+                            statistic, pvalue = f_oneway(*groups)
+                            results.append({
+                                'feature': feature,
+                                'test_type': 'ANOVA F-test',
+                                'statistic': statistic,
+                                'pvalue': pvalue,
+                                'significant': pvalue < 0.05
+                            })
+                    else:
+                        # Chi-square test for categorical feature vs categorical target
+                        contingency_table = pd.crosstab(self.df[feature], self.df[self.target_column])
+                        chi2, pvalue, dof, expected = chi2_contingency(contingency_table)
+                        results.append({
+                            'feature': feature,
+                            'test_type': 'Chi-square test',
+                            'statistic': chi2,
+                            'pvalue': pvalue,
+                            'significant': pvalue < 0.05
+                        })
+
+                elif self.task == 'regression':
+                    if pd.api.types.is_numeric_dtype(self.df[feature]):
+                        # Pearson correlation for numeric feature vs numeric target
+                        valid_idx = self.df[[feature, self.target_column]].dropna().index
+                        if len(valid_idx) > 2:
+                            corr, pvalue = pearsonr(self.df.loc[valid_idx, feature],
+                                                    self.df.loc[valid_idx, self.target_column])
+                            results.append({
+                                'feature': feature,
+                                'test_type': 'Pearson correlation',
+                                'statistic': corr,
+                                'pvalue': pvalue,
+                                'significant': pvalue < 0.05
+                            })
+                    else:
+                        # ANOVA F-test for categorical feature vs numeric target
+                        groups = [self.df[self.df[feature] == cat][self.target_column].dropna()
+                                  for cat in self.df[feature].unique()]
+                        groups = [g for g in groups if len(g) > 0]
+                        if len(groups) >= 2:
+                            statistic, pvalue = f_oneway(*groups)
+                            results.append({
+                                'feature': feature,
+                                'test_type': 'ANOVA F-test',
+                                'statistic': statistic,
+                                'pvalue': pvalue,
+                                'significant': pvalue < 0.05
+                            })
+
+            except Exception as e:
+                logger.warning(f"Could not analyze feature '{feature}': {e}")
+                continue
+
+        df_results = pd.DataFrame(results)
+        if not df_results.empty:
+            df_results = df_results.sort_values('pvalue')
+
+        return df_results
+
+    def analyze_class_wise_statistics(self, feature_columns: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
+        """
+        Compute statistics for each feature broken down by target class (classification only).
+
+        Args:
+            feature_columns: List of numeric feature columns. If None, uses all numeric columns.
+
+        Returns:
+            Dict mapping feature names to DataFrames with class-wise statistics
+        """
+        if self.task != 'classification':
+            logger.warning("analyze_class_wise_statistics() is only available for classification tasks")
+            return {}
+
+        if feature_columns is None:
+            feature_columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            feature_columns = [col for col in feature_columns if col != self.target_column]
+
+        results = {}
+        classes = sorted(self.df[self.target_column].dropna().unique())
+
+        for feature in feature_columns:
+            if feature == self.target_column:
+                continue
+
+            class_stats = []
+            for cls in classes:
+                class_data = self.df[self.df[self.target_column] == cls][feature].dropna()
+                if len(class_data) > 0:
+                    class_stats.append({
+                        'class': cls,
+                        'count': len(class_data),
+                        'mean': class_data.mean(),
+                        'median': class_data.median(),
+                        'std': class_data.std(),
+                        'min': class_data.min(),
+                        'max': class_data.max()
+                    })
+
+            if class_stats:
+                results[feature] = pd.DataFrame(class_stats)
+
+        return results
+
+    def plot_feature_by_class(self, feature: str, plot_type: str = 'box',
+                             figsize: tuple = (10, 6), show: bool = True):
+        """
+        Plot feature distribution by class (classification only).
+
+        Args:
+            feature: Feature column name
+            plot_type: Type of plot ('box', 'violin', 'hist')
+            figsize: Figure size as (width, height)
+            show: If True, display the plot. Default True.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object, or None if not classification
+        """
+        if self.task != 'classification':
+            logger.warning("plot_feature_by_class() is only available for classification tasks")
+            return None
+
+        if feature not in self.df.columns:
+            logger.warning(f"Feature '{feature}' not found in dataframe")
+            return None
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        if plot_type == 'box':
+            self.df.boxplot(column=feature, by=self.target_column, ax=ax)
+            ax.set_title(f'Box Plot: {feature} by {self.target_column}')
+        elif plot_type == 'violin':
+            sns.violinplot(data=self.df, x=self.target_column, y=feature, ax=ax)
+            ax.set_title(f'Violin Plot: {feature} by {self.target_column}')
+        elif plot_type == 'hist':
+            for cls in sorted(self.df[self.target_column].dropna().unique()):
+                class_data = self.df[self.df[self.target_column] == cls][feature].dropna()
+                ax.hist(class_data, alpha=0.5, label=f'Class {cls}', bins=20)
+            ax.set_xlabel(feature)
+            ax.set_ylabel('Frequency')
+            ax.set_title(f'Histogram: {feature} by {self.target_column}')
+            ax.legend()
+
+        plt.tight_layout()
+
+        if show:
+            plt.show()
+
+        return fig
+
+    # ============================================================================
+    # PHASE 3: Regression-Specific Analysis
+    # ============================================================================
+
+    def analyze_feature_correlations(self, feature_columns: Optional[List[str]] = None,
+                                     method: str = 'pearson') -> pd.DataFrame:
+        """
+        Analyze correlations between numeric features and target (regression only).
+
+        Args:
+            feature_columns: List of numeric features. If None, uses all numeric columns.
+            method: Correlation method ('pearson' or 'spearman')
+
+        Returns:
+            DataFrame with columns: feature, correlation, abs_correlation, pvalue, significant
+        """
+        if self.task != 'regression':
+            logger.warning("analyze_feature_correlations() is only available for regression tasks")
+            return pd.DataFrame()
+
+        if feature_columns is None:
+            feature_columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            feature_columns = [col for col in feature_columns if col != self.target_column]
+
+        results = []
+        for feature in feature_columns:
+            if feature == self.target_column:
+                continue
+
+            valid_idx = self.df[[feature, self.target_column]].dropna().index
+            if len(valid_idx) < 3:
+                continue
+
+            try:
+                if method == 'pearson':
+                    corr, pvalue = pearsonr(self.df.loc[valid_idx, feature],
+                                           self.df.loc[valid_idx, self.target_column])
+                elif method == 'spearman':
+                    corr, pvalue = spearmanr(self.df.loc[valid_idx, feature],
+                                            self.df.loc[valid_idx, self.target_column])
+                else:
+                    logger.warning(f"Unknown correlation method: {method}")
+                    continue
+
+                results.append({
+                    'feature': feature,
+                    'correlation': corr,
+                    'abs_correlation': abs(corr),
+                    'pvalue': pvalue,
+                    'significant': pvalue < 0.05
+                })
+            except Exception as e:
+                logger.warning(f"Could not compute correlation for '{feature}': {e}")
+                continue
+
+        df_results = pd.DataFrame(results)
+        if not df_results.empty:
+            df_results = df_results.sort_values('abs_correlation', ascending=False)
+
+        return df_results
+
+    def analyze_mutual_information(self, feature_columns: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Calculate mutual information between features and target.
+
+        Args:
+            feature_columns: List of features. If None, uses all columns except target.
+
+        Returns:
+            DataFrame with columns: feature, mutual_info, normalized_mi
+        """
+        if feature_columns is None:
+            feature_columns = [col for col in self.df.columns if col != self.target_column]
+
+        # Prepare data - only numeric features for MI
+        numeric_features = [col for col in feature_columns
+                           if pd.api.types.is_numeric_dtype(self.df[col])]
+
+        if not numeric_features:
+            logger.warning("No numeric features found for mutual information analysis")
+            return pd.DataFrame()
+
+        X = self.df[numeric_features].fillna(0)
+        y = self.df[self.target_column].dropna()
+
+        # Align X and y
+        common_idx = X.index.intersection(y.index)
+        X = X.loc[common_idx]
+        y = y.loc[common_idx]
+
+        if len(y) < 10:
+            logger.warning("Insufficient data for mutual information analysis")
+            return pd.DataFrame()
+
+        try:
+            if self.task == 'classification':
+                mi_scores = mutual_info_classif(X, y, random_state=42)
+            else:
+                mi_scores = mutual_info_regression(X, y, random_state=42)
+
+            # Normalize by entropy
+            max_mi = np.log(len(np.unique(y))) if self.task == 'classification' else np.max(mi_scores)
+            if max_mi > 0:
+                normalized_mi = mi_scores / max_mi
+            else:
+                normalized_mi = mi_scores
+
+            results = pd.DataFrame({
+                'feature': numeric_features,
+                'mutual_info': mi_scores,
+                'normalized_mi': normalized_mi
+            })
+
+            results = results.sort_values('mutual_info', ascending=False)
+            return results
+
+        except Exception as e:
+            logger.warning(f"Could not compute mutual information: {e}")
+            return pd.DataFrame()
+
+    def plot_feature_vs_target(self, features: Optional[List[str]] = None,
+                               max_features: int = 6, figsize: tuple = (15, 10), show: bool = True):
+        """
+        Create scatter plots of features vs target (regression only).
+
+        Args:
+            features: List of features to plot. If None, uses top correlated features.
+            max_features: Maximum number of features to plot
+            figsize: Figure size as (width, height)
+            show: If True, display the plot. Default True.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object, or None if not regression
+        """
+        if self.task != 'regression':
+            logger.warning("plot_feature_vs_target() is only available for regression tasks")
+            return None
+
+        if features is None:
+            # Use top correlated features
+            corr_df = self.analyze_feature_correlations()
+            if corr_df.empty:
+                logger.warning("No features available for plotting")
+                return None
+            features = corr_df.head(max_features)['feature'].tolist()
+
+        features = features[:max_features]
+        n_features = len(features)
+
+        if n_features == 0:
+            logger.warning("No features to plot")
+            return None
+
+        n_cols = min(3, n_features)
+        n_rows = (n_features + n_cols - 1) // n_cols
+
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+        if n_rows * n_cols == 1:
+            axes = [axes]
+        else:
+            axes = axes.flatten()
+
+        for idx, feature in enumerate(features):
+            ax = axes[idx]
+            valid_idx = self.df[[feature, self.target_column]].dropna().index
+
+            if len(valid_idx) > 0:
+                ax.scatter(self.df.loc[valid_idx, feature],
+                          self.df.loc[valid_idx, self.target_column],
+                          alpha=0.5)
+                ax.set_xlabel(feature)
+                ax.set_ylabel(self.target_column)
+
+                # Add regression line
+                try:
+                    z = np.polyfit(self.df.loc[valid_idx, feature],
+                                  self.df.loc[valid_idx, self.target_column], 1)
+                    p = np.poly1d(z)
+                    x_line = np.linspace(self.df.loc[valid_idx, feature].min(),
+                                        self.df.loc[valid_idx, feature].max(), 100)
+                    ax.plot(x_line, p(x_line), "r--", alpha=0.8)
+                except:
+                    pass
+
+                ax.set_title(f'{feature} vs {self.target_column}')
+
+        # Remove empty subplots
+        for idx in range(len(features), len(axes)):
+            fig.delaxes(axes[idx])
+
+        plt.tight_layout()
+
+        if show:
+            plt.show()
+
+        return fig
+
+    def analyze_residuals(self, predictions: pd.Series) -> Dict[str, Any]:
+        """
+        Analyze residuals for regression tasks.
+
+        Args:
+            predictions: Predicted target values (must have same index as self.df)
+
+        Returns:
+            Dict containing residual statistics and test results
+        """
+        if self.task != 'regression':
+            logger.warning("analyze_residuals() is only available for regression tasks")
+            return {}
+
+        # Align predictions with actual values
+        common_idx = self.df[self.target_column].dropna().index.intersection(predictions.index)
+        actual = self.df.loc[common_idx, self.target_column]
+        pred = predictions.loc[common_idx]
+
+        if len(actual) == 0:
+            logger.warning("No valid data for residual analysis")
+            return {}
+
+        residuals = actual - pred
+
+        results = {
+            'residual_mean': residuals.mean(),
+            'residual_std': residuals.std(),
+            'residual_min': residuals.min(),
+            'residual_max': residuals.max(),
+            'mae': np.abs(residuals).mean(),
+            'rmse': np.sqrt((residuals ** 2).mean()),
+            'r2_score': r2_score(actual, pred)
+        }
+
+        # Normality test on residuals
+        if len(residuals) >= 3:
+            try:
+                shapiro_stat, shapiro_p = stats.shapiro(residuals.sample(min(5000, len(residuals))))
+                results['shapiro_stat'] = shapiro_stat
+                results['shapiro_pvalue'] = shapiro_p
+                results['residuals_normal'] = shapiro_p > 0.05
+            except Exception as e:
+                logger.warning(f"Could not compute normality test on residuals: {e}")
+
+        return results
+
+    def plot_residuals(self, predictions: pd.Series, figsize: tuple = (12, 5), show: bool = True):
+        """
+        Plot residual analysis (regression only).
+
+        Args:
+            predictions: Predicted target values
+            figsize: Figure size as (width, height)
+            show: If True, display the plot. Default True.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object, or None if not regression
+        """
+        if self.task != 'regression':
+            logger.warning("plot_residuals() is only available for regression tasks")
+            return None
+
+        common_idx = self.df[self.target_column].dropna().index.intersection(predictions.index)
+        actual = self.df.loc[common_idx, self.target_column]
+        pred = predictions.loc[common_idx]
+        residuals = actual - pred
+
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+        # Residuals vs Predicted
+        axes[0].scatter(pred, residuals, alpha=0.5)
+        axes[0].axhline(y=0, color='r', linestyle='--')
+        axes[0].set_xlabel('Predicted Values')
+        axes[0].set_ylabel('Residuals')
+        axes[0].set_title('Residual Plot')
+
+        # Q-Q plot of residuals
+        stats.probplot(residuals, dist="norm", plot=axes[1])
+        axes[1].set_title('Q-Q Plot of Residuals')
+
+        plt.tight_layout()
+
+        if show:
+            plt.show()
+
+        return fig
+
+    # ============================================================================
+    # PHASE 4: Common Data Quality Checks
+    # ============================================================================
+
+    def analyze_data_quality(self) -> Dict[str, Any]:
+        """
+        Analyze data quality issues including missing values, outliers, and potential leakage.
+
+        Returns:
+            Dict containing data quality metrics
+        """
+        results = {}
+
+        # Missing values analysis
+        feature_cols = [col for col in self.df.columns if col != self.target_column]
+        missing_by_feature = {}
+        for col in feature_cols:
+            missing_count = self.df[col].isnull().sum()
+            if missing_count > 0:
+                missing_by_feature[col] = {
+                    'count': missing_count,
+                    'percent': missing_count / len(self.df) * 100
+                }
+
+        results['missing_values'] = missing_by_feature
+        results['target_missing'] = {
+            'count': self.df[self.target_column].isnull().sum(),
+            'percent': self.df[self.target_column].isnull().sum() / len(self.df) * 100
+        }
+
+        # Potential data leakage detection
+        leakage_suspects = []
+
+        if self.task == 'regression':
+            # Check for perfect or near-perfect correlations
+            corr_df = self.analyze_feature_correlations()
+            if not corr_df.empty:
+                perfect_corr = corr_df[corr_df['abs_correlation'] > 0.99]
+                for _, row in perfect_corr.iterrows():
+                    leakage_suspects.append({
+                        'feature': row['feature'],
+                        'reason': f'Near-perfect correlation ({row["correlation"]:.4f})',
+                        'severity': 'high'
+                    })
+
+        elif self.task == 'classification':
+            # Check for features with very low p-values and high test statistics
+            rel_df = self.analyze_feature_target_relationship()
+            if not rel_df.empty:
+                suspicious = rel_df[rel_df['pvalue'] < 1e-10]
+                for _, row in suspicious.iterrows():
+                    leakage_suspects.append({
+                        'feature': row['feature'],
+                        'reason': f'Extremely significant relationship (p={row["pvalue"]:.2e})',
+                        'severity': 'medium'
+                    })
+
+        results['leakage_suspects'] = leakage_suspects
+
+        # Constant features
+        constant_features = []
+        for col in feature_cols:
+            if self.df[col].nunique() == 1:
+                constant_features.append(col)
+
+        results['constant_features'] = constant_features
+
+        return results
+
+    def calculate_vif(self, feature_columns: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Calculate Variance Inflation Factor for multicollinearity detection.
+
+        Args:
+            feature_columns: List of numeric features. If None, uses all numeric columns.
+
+        Returns:
+            DataFrame with columns: feature, VIF
+        """
+        if feature_columns is None:
+            feature_columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            feature_columns = [col for col in feature_columns if col != self.target_column]
+
+        if len(feature_columns) < 2:
+            logger.warning("Need at least 2 features for VIF calculation")
+            return pd.DataFrame()
+
+        # Prepare data
+        df_vif = self.df[feature_columns].fillna(self.df[feature_columns].mean())
+
+        # Remove constant columns
+        df_vif = df_vif.loc[:, df_vif.std() > 0]
+
+        if df_vif.shape[1] < 2:
+            logger.warning("Insufficient non-constant features for VIF calculation")
+            return pd.DataFrame()
+
+        try:
+            vif_data = []
+            for i, col in enumerate(df_vif.columns):
+                vif = variance_inflation_factor(df_vif.values, i)
+                vif_data.append({'feature': col, 'VIF': vif})
+
+            vif_df = pd.DataFrame(vif_data)
+            vif_df = vif_df.sort_values('VIF', ascending=False)
+
+            return vif_df
+
+        except Exception as e:
+            logger.warning(f"Could not calculate VIF: {e}")
+            return pd.DataFrame()
+
+    def generate_recommendations(self) -> List[str]:
+        """
+        Generate actionable recommendations based on analysis.
+
+        Returns:
+            List of recommendation strings
+        """
+        recommendations = []
+
+        # Data quality recommendations
+        quality = self.analyze_data_quality()
+
+        if quality['missing_values']:
+            high_missing = [k for k, v in quality['missing_values'].items() if v['percent'] > 50]
+            if high_missing:
+                recommendations.append(
+                    f"⚠ {len(high_missing)} features have >50% missing values: "
+                    f"{', '.join(high_missing[:3])}{'...' if len(high_missing) > 3 else ''}. "
+                    "Consider dropping or imputing."
+                )
+
+        if quality['target_missing']['percent'] > 0:
+            recommendations.append(
+                f"⚠ Target column has {quality['target_missing']['percent']:.1f}% missing values. "
+                "These rows cannot be used for supervised learning."
+            )
+
+        if quality['constant_features']:
+            recommendations.append(
+                f"⚠ {len(quality['constant_features'])} constant features provide no information. "
+                f"Consider dropping: {', '.join(quality['constant_features'][:3])}"
+            )
+
+        if quality['leakage_suspects']:
+            high_severity = [s for s in quality['leakage_suspects'] if s['severity'] == 'high']
+            if high_severity:
+                recommendations.append(
+                    f"🚨 {len(high_severity)} features show signs of potential data leakage. "
+                    "Review these features carefully!"
+                )
+
+        # Task-specific recommendations
+        if self.task == 'classification':
+            imbalance = self.get_class_imbalance_info()
+            if imbalance and imbalance['severity'] != 'none':
+                recommendations.append(f"⚙ {imbalance['recommendation']}")
+
+        elif self.task == 'regression':
+            dist = self.analyze_target_distribution()
+            if 'is_normal' in dist and not dist['is_normal']:
+                if abs(dist['skewness']) > 1:
+                    recommendations.append(
+                        "⚙ Target is highly skewed. Consider log transformation or robust regression methods."
+                    )
+
+        # Feature selection recommendations
+        try:
+            mi_df = self.analyze_mutual_information()
+            if not mi_df.empty:
+                low_mi = mi_df[mi_df['normalized_mi'] < 0.01]
+                if len(low_mi) > 0:
+                    recommendations.append(
+                        f"📊 {len(low_mi)} features have very low mutual information with target. "
+                        "Consider feature selection."
+                    )
+        except:
+            pass
+
+        # Multicollinearity check
+        try:
+            vif_df = self.calculate_vif()
+            if not vif_df.empty:
+                high_vif = vif_df[vif_df['VIF'] > 10]
+                if len(high_vif) > 0:
+                    recommendations.append(
+                        f"📉 {len(high_vif)} features have high multicollinearity (VIF>10). "
+                        f"Consider removing: {', '.join(high_vif.head(3)['feature'].tolist())}"
+                    )
+        except:
+            pass
+
+        if not recommendations:
+            recommendations.append("✓ No major issues detected. Data quality looks good!")
+
+        return recommendations
 
 
 def quick_analysis(df: pd.DataFrame) -> None:

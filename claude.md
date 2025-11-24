@@ -46,7 +46,7 @@ mltoolkit/
 │   ├── preprocessing.py       # Data cleaning
 │   ├── feature_selection.py   # Feature selection
 │   └── exceptions.py          # Custom exceptions
-├── tests/                     # Test suite (119 tests)
+├── tests/                     # Test suite (129 tests)
 │   ├── test_preprocessing.py
 │   ├── test_feature_engineering.py
 │   ├── test_data_analysis.py
@@ -153,7 +153,7 @@ if not columns:
 - Correlation analysis
 - Plotting methods that return `Figure` objects
 
-**TargetAnalyzer - Phases 1-5, 7 Complete**:
+**TargetAnalyzer - Phases 1-5, 7-8 Complete**:
 **State**: `self.task` (auto-detected or specified), `self._analysis_cache` (dict)
 
 **Phase 1 - Core Infrastructure**:
@@ -196,6 +196,15 @@ if not columns:
 - Missing value indicator recommendations
 - Priority-sorted actionable suggestions (high/medium/low)
 
+**Phase 8 - Model Recommendations**:
+- `recommend_models()`: ML algorithm suggestions based on data characteristics
+- Classification: handles imbalance, dimensionality, binary/multiclass
+- Regression: considers outliers, target distribution, feature relationships
+- Dataset size awareness (small/medium/large)
+- Model-specific considerations and tuning guidance
+- Priority-sorted recommendations (Random Forest, XGBoost, LightGBM, Linear models, Neural Networks)
+- Practical guidance on model selection and hyperparameter tuning
+
 **Usage Pattern**:
 ```python
 # Initialize
@@ -235,6 +244,13 @@ suggestions = analyzer.suggest_feature_engineering()
 for sugg in suggestions:
     print(f"{sugg['priority'].upper()}: {sugg['feature']} - {sugg['suggestion']}")
     print(f"  Reason: {sugg['reason']}")
+
+# Phase 8: Model recommendations
+model_recs = analyzer.recommend_models()
+for rec in model_recs:
+    print(f"{rec['priority'].upper()}: {rec['model']}")
+    print(f"  Why: {rec['reason']}")
+    print(f"  Note: {rec['considerations']}")
 
 # Legacy: Quick summary report (Phase 1)
 report = analyzer.generate_summary_report()
@@ -340,7 +356,7 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 - `test_preprocessing.py`: 12 tests (inplace bugs, deprecated methods, div-by-zero)
 - `test_feature_engineering.py`: 13 tests (inplace bugs, transformer persistence)
 - `test_data_analysis.py`: 6 tests (div-by-zero protection)
-- `test_target_analyzer.py`: 77 tests (Phases 1-5,7: task detection, statistical tests, correlations, MI, VIF, data quality, recommendations, report generation, feature engineering suggestions, integration tests)
+- `test_target_analyzer.py`: 87 tests (Phases 1-5,7-8: task detection, statistical tests, correlations, MI, VIF, data quality, recommendations, report generation, feature engineering suggestions, model recommendations, integration tests)
 - `test_exceptions.py`: 4 tests (custom exception messages)
 - `test_plotting.py`: 8 tests (figure returns, save capability)
 

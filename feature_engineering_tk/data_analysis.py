@@ -1794,6 +1794,173 @@ class TargetAnalyzer:
         logger.info(f"Generated {len(suggestions)} feature engineering suggestions")
         return suggestions
 
+    # =======================
+    # Phase 8: Model Recommendations
+    # =======================
+
+    def recommend_models(self) -> List[Dict[str, Any]]:
+        """
+        Recommend ML algorithms based on data characteristics and task type.
+
+        Analyzes:
+        - Task type (classification/regression)
+        - Dataset size and dimensionality
+        - Class imbalance (classification)
+        - Feature relationships (linear/non-linear)
+        - Target distribution (regression)
+
+        Returns:
+            List of dicts with 'model', 'reason', 'priority', and 'considerations' keys
+        """
+        recommendations = []
+        n_samples, n_features = len(self.df), len(self.df.columns) - 1
+        task_info = self.get_task_info()
+
+        # Dataset size categories
+        is_small = n_samples < 1000
+        is_large = n_samples > 50000
+        is_high_dim = n_features > 50
+
+        if self.task == 'classification':
+            imbalance_info = self.get_class_imbalance_info()
+            is_imbalanced = not imbalance_info['is_balanced']
+            is_binary = task_info.get('class_count', 0) == 2
+
+            # 1. Tree-based models (generally robust)
+            if is_imbalanced:
+                recommendations.append({
+                    'model': 'Random Forest with class_weight="balanced"',
+                    'reason': 'Handles class imbalance well, robust to outliers, good baseline',
+                    'priority': 'high',
+                    'considerations': 'May overfit on small datasets. Tune max_depth and min_samples_split.'
+                })
+
+                recommendations.append({
+                    'model': 'XGBoost with scale_pos_weight',
+                    'reason': f'Excellent for imbalanced data (ratio: {imbalance_info["imbalance_ratio"]:.1f}:1), high performance',
+                    'priority': 'high',
+                    'considerations': 'Tune learning_rate, max_depth. Can be slower to train.'
+                })
+            else:
+                recommendations.append({
+                    'model': 'Random Forest',
+                    'reason': 'Balanced classes, robust ensemble method, good feature importance',
+                    'priority': 'high',
+                    'considerations': 'Fast training, handles non-linear relationships well.'
+                })
+
+            # 2. Logistic Regression (if appropriate)
+            if not is_high_dim or n_samples > n_features * 10:
+                penalty = 'l1 or l2' if is_high_dim else 'l2'
+                recommendations.append({
+                    'model': f'Logistic Regression (penalty={penalty})',
+                    'reason': 'Fast, interpretable, good for linear relationships',
+                    'priority': 'medium',
+                    'considerations': f'Requires feature scaling. Good baseline for {"binary" if is_binary else "multiclass"} classification.'
+                })
+
+            # 3. SVM (for small-medium datasets)
+            if is_small:
+                recommendations.append({
+                    'model': 'Support Vector Machine (SVM)',
+                    'reason': 'Effective for small datasets with clear margin of separation',
+                    'priority': 'medium',
+                    'considerations': 'Sensitive to scaling. Try RBF kernel for non-linear boundaries.'
+                })
+
+            # 4. Neural Networks (for large datasets)
+            if is_large and not is_high_dim:
+                recommendations.append({
+                    'model': 'Neural Network (MLP)',
+                    'reason': f'Large dataset ({n_samples} samples) can leverage deep learning',
+                    'priority': 'medium',
+                    'considerations': 'Requires careful tuning, feature scaling, and regularization.'
+                })
+
+            # 5. Gradient Boosting
+            recommendations.append({
+                'model': 'LightGBM',
+                'reason': 'Fast, memory efficient, handles categorical features natively',
+                'priority': 'high' if is_large else 'medium',
+                'considerations': 'Excellent speed/performance trade-off. Good default parameters.'
+            })
+
+        else:  # Regression
+            target_dist = self.analyze_target_distribution()
+            has_outliers = target_dist.get('has_outliers', False)
+
+            # 1. Tree-based models
+            recommendations.append({
+                'model': 'Random Forest Regressor',
+                'reason': 'Robust baseline, handles non-linear relationships, feature importance',
+                'priority': 'high',
+                'considerations': 'Good starting point. Tune n_estimators and max_depth.'
+            })
+
+            recommendations.append({
+                'model': 'XGBoost Regressor',
+                'reason': 'High performance, handles complex patterns',
+                'priority': 'high',
+                'considerations': 'Often wins competitions. Tune learning_rate, max_depth, subsample.'
+            })
+
+            # 2. Linear models
+            if has_outliers:
+                recommendations.append({
+                    'model': 'Huber Regressor',
+                    'reason': f'Target has outliers (IQR method), robust to outliers',
+                    'priority': 'medium',
+                    'considerations': 'More robust than Linear Regression for noisy data.'
+                })
+            else:
+                if is_high_dim:
+                    recommendations.append({
+                        'model': 'Ridge or Lasso Regression',
+                        'reason': f'High dimensional ({n_features} features), regularization prevents overfitting',
+                        'priority': 'medium',
+                        'considerations': 'Use Ridge for correlated features, Lasso for feature selection.'
+                    })
+                else:
+                    recommendations.append({
+                        'model': 'Linear Regression',
+                        'reason': 'Simple, interpretable, good baseline',
+                        'priority': 'medium',
+                        'considerations': 'Fast training. Check residuals for linearity assumption.'
+                    })
+
+            # 3. Gradient Boosting
+            recommendations.append({
+                'model': 'LightGBM Regressor',
+                'reason': 'Fast training, excellent performance',
+                'priority': 'high' if is_large else 'medium',
+                'considerations': 'Great speed/accuracy balance. Handle categorical features automatically.'
+            })
+
+            # 4. Neural Networks (for large datasets)
+            if is_large:
+                recommendations.append({
+                    'model': 'Neural Network (MLP Regressor)',
+                    'reason': f'Large dataset ({n_samples} samples) suitable for deep learning',
+                    'priority': 'low',
+                    'considerations': 'Requires scaling, tuning, and more training time.'
+                })
+
+        # General recommendations
+        if is_small:
+            recommendations.append({
+                'model': 'Cross-Validation with multiple models',
+                'reason': f'Small dataset ({n_samples} samples) - compare multiple approaches',
+                'priority': 'high',
+                'considerations': 'Use stratified k-fold. Avoid complex models that may overfit.'
+            })
+
+        # Sort by priority
+        priority_order = {'high': 0, 'medium': 1, 'low': 2}
+        recommendations.sort(key=lambda x: priority_order[x['priority']])
+
+        logger.info(f"Generated {len(recommendations)} model recommendations for {self.task}")
+        return recommendations
+
 
 def quick_analysis(df: pd.DataFrame) -> None:
     """Perform a quick comprehensive analysis of a dataframe."""

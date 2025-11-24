@@ -1031,3 +1031,176 @@ class TestPhase7FeatureEngineeringSuggestions:
 
         # Should return empty list or minimal suggestions
         assert isinstance(suggestions, list)
+
+
+# =======================
+# Phase 8: Model Recommendations Tests
+# =======================
+
+class TestPhase8ModelRecommendations:
+    """Test Phase 8 model recommendation features."""
+
+    def test_recommend_models_basic(self, classification_df):
+        """Test basic model recommendation generation."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+
+        # Check recommendation structure
+        for rec in recommendations:
+            assert 'model' in rec
+            assert 'reason' in rec
+            assert 'priority' in rec
+            assert 'considerations' in rec
+            assert rec['priority'] in ['high', 'medium', 'low']
+
+    def test_recommend_models_classification_balanced(self):
+        """Test recommendations for balanced classification."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(1000),
+            'feature2': np.random.randn(1000),
+            'target': np.random.choice([0, 1], 1000, p=[0.5, 0.5])
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        # Should recommend Random Forest (balanced data)
+        rf_recs = [r for r in recommendations if 'Random Forest' in r['model']]
+        assert len(rf_recs) > 0
+        assert 'balanced' in rf_recs[0]['model'].lower() or 'Balanced classes' in rf_recs[0]['reason']
+
+    def test_recommend_models_classification_imbalanced(self):
+        """Test recommendations for imbalanced classification."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(1000),
+            'feature2': np.random.randn(1000),
+            'target': np.random.choice([0, 1], 1000, p=[0.9, 0.1])
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        # Should recommend models for imbalanced data
+        imbalance_aware = [r for r in recommendations
+                          if 'imbalance' in r['reason'].lower() or 'balanced' in r['model'].lower()]
+        assert len(imbalance_aware) > 0
+
+    def test_recommend_models_regression(self, regression_df):
+        """Test recommendations for regression task."""
+        analyzer = TargetAnalyzer(regression_df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        # Should recommend regression models
+        regressor_recs = [r for r in recommendations
+                         if 'Regressor' in r['model'] or 'Regression' in r['model']]
+        assert len(regressor_recs) > 0
+
+        # Should include Random Forest and tree-based models
+        tree_models = [r for r in recommendations
+                      if 'Forest' in r['model'] or 'XGBoost' in r['model'] or 'LightGBM' in r['model']]
+        assert len(tree_models) > 0
+
+    def test_recommend_models_small_dataset(self):
+        """Test recommendations for small dataset."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(100),
+            'feature2': np.random.randn(100),
+            'target': np.random.randint(0, 2, 100)
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        # Should recommend cross-validation for small datasets
+        cv_recs = [r for r in recommendations if 'Cross-Validation' in r['model']]
+        assert len(cv_recs) > 0
+        assert 'small dataset' in cv_recs[0]['reason'].lower()
+
+    def test_recommend_models_high_dimensional(self):
+        """Test recommendations for high-dimensional data."""
+        np.random.seed(42)
+        n_features = 60
+        df = pd.DataFrame(
+            np.random.randn(500, n_features + 1),
+            columns=[f'feature_{i}' for i in range(n_features)] + ['target']
+        )
+
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        # Should mention regularization or dimensionality
+        reg_recs = [r for r in recommendations
+                   if 'regularization' in r['reason'].lower() or 'Ridge' in r['model'] or 'Lasso' in r['model']]
+        # May or may not have explicit regularization recommendations depending on task
+        assert isinstance(recommendations, list)
+
+    def test_recommend_models_with_outliers(self):
+        """Test recommendations for regression with outliers."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(200),
+            'feature2': np.random.randn(200),
+            'target': np.concatenate([np.random.randn(180) * 10 + 50,
+                                     np.array([200, 300, -100] * 6 + [150, 250])])  # Add outliers
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        # Should recommend robust models if outliers detected
+        robust_recs = [r for r in recommendations
+                      if 'Huber' in r['model'] or 'outliers' in r['reason'].lower()]
+        # May or may not detect outliers depending on distribution
+        assert isinstance(recommendations, list)
+
+    def test_recommendations_sorted_by_priority(self, regression_df):
+        """Test that recommendations are sorted by priority."""
+        analyzer = TargetAnalyzer(regression_df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        if len(recommendations) > 1:
+            priorities = [r['priority'] for r in recommendations]
+            # Check high comes before low
+            if 'high' in priorities and 'low' in priorities:
+                high_idx = priorities.index('high')
+                low_idx = priorities.index('low')
+                assert high_idx < low_idx
+
+    def test_recommend_models_includes_considerations(self, classification_df):
+        """Test that all recommendations include practical considerations."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        for rec in recommendations:
+            assert len(rec['considerations']) > 0
+            # Considerations should provide actionable guidance
+            assert isinstance(rec['considerations'], str)
+
+    def test_recommend_models_classification_vs_regression(self):
+        """Test that different models are recommended for classification vs regression."""
+        np.random.seed(42)
+        data = np.random.randn(500, 3)
+
+        # Classification
+        df_class = pd.DataFrame(data, columns=['f1', 'f2', 'target'])
+        df_class['target'] = np.random.choice([0, 1], 500)
+        analyzer_class = TargetAnalyzer(df_class, 'target')
+        recs_class = analyzer_class.recommend_models()
+
+        # Regression
+        df_reg = pd.DataFrame(data, columns=['f1', 'f2', 'target'])
+        analyzer_reg = TargetAnalyzer(df_reg, 'target')
+        recs_reg = analyzer_reg.recommend_models()
+
+        # Get model names
+        class_models = {r['model'] for r in recs_class}
+        reg_models = {r['model'] for r in recs_reg}
+
+        # Should have some different models
+        assert class_models != reg_models

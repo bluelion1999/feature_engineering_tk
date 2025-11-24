@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-11-24
+
+### Added
+
+- **TargetAnalyzer Class** - Comprehensive target-aware statistical analysis for ML tasks
+  - **Auto Task Detection**: Automatically detects classification vs regression based on target column characteristics
+  - **Initialization**: `TargetAnalyzer(df, target_column, task='auto')` with intelligent task inference
+
+- **Phase 1: Core Infrastructure**
+  - `get_task_info()`: Get detected task type and target column information
+  - `analyze_class_distribution()`: Class counts, percentages, and imbalance ratios (classification)
+  - `get_class_imbalance_info()`: Detailed imbalance analysis with severity levels (mild/moderate/severe/extreme)
+  - `analyze_target_distribution()`: Comprehensive target statistics with optional normality tests (regression)
+  - `plot_class_distribution()`: Visualize class distribution with counts and percentages
+  - `plot_target_distribution()`: Target histogram with KDE and Q-Q plot for normality assessment
+  - `generate_summary_report()`: Legacy formatted text report for quick analysis
+  - Caching mechanism for expensive computations
+
+- **Phase 2: Classification Statistical Tests**
+  - `analyze_feature_target_relationship()`: Chi-square tests for categorical features, ANOVA F-tests for numeric features
+  - `analyze_class_wise_statistics()`: Mean, median, and std of numeric features per class
+  - `plot_feature_by_class()`: Box plots, violin plots, or histograms showing feature distributions by class
+
+- **Phase 3: Regression Analysis & Correlations**
+  - `analyze_feature_correlations()`: Pearson and Spearman correlations with target
+  - `analyze_mutual_information()`: Feature importance via mutual information (both classification and regression)
+  - `plot_feature_vs_target()`: Scatter plots with regression lines for top correlated features
+  - `analyze_residuals()`: Residual analysis with MAE, RMSE, R², and normality tests
+  - `plot_residuals()`: Residual plots (residuals vs predicted, Q-Q plot for residual normality)
+
+- **Phase 4: Data Quality & Recommendations**
+  - `analyze_data_quality()`: Comprehensive checks for missing values, constant features, duplicates
+  - Potential data leakage detection: Perfect correlations, suspicious p-values, zero variance features
+  - `calculate_vif()`: Multicollinearity detection using Variance Inflation Factor (delegates to DataAnalyzer, auto-excludes target)
+  - `generate_recommendations()`: Actionable recommendations with priority levels (high/medium/low) based on all analyses
+
+- **Phase 5: Report Generation & Export**
+  - `generate_full_report()`: Structured dictionary containing all analyses (distribution, relationships, MI scores, quality, VIF, recommendations)
+  - `export_report()`: Multi-format export with three options:
+    - **HTML**: Professional report with CSS styling, tables, and formatting
+    - **Markdown**: Well-structured markdown with tables for documentation/GitHub
+    - **JSON**: Machine-readable format for programmatic access
+  - Reports include all relevant analyses based on task type
+
+- **Phase 7: Feature Engineering Suggestions**
+  - `suggest_feature_engineering()`: Intelligent feature transformation recommendations
+  - **Skewness-based transforms**: Log, sqrt, or polynomial transforms for skewed distributions
+  - **Categorical encoding strategies**: One-hot (low cardinality), target encoding (medium), ordinal based on data characteristics
+  - **Scaling recommendations**: Based on feature value ranges and distributions
+  - **Non-linear relationships**: Polynomial feature suggestions for features with non-linear target relationships
+  - **Interaction terms**: Suggestions for correlated features that may benefit from interactions
+  - **Missing value indicators**: Binary flags for features with significant missing data
+  - **Binning suggestions**: For high-cardinality numeric features in classification tasks
+  - Priority-sorted suggestions (high/medium/low) with detailed reasoning
+
+- **Phase 8: Model Recommendations**
+  - `recommend_models()`: ML algorithm suggestions tailored to dataset characteristics
+  - **Classification models**: Handles class imbalance (SMOTE, class weights), dimensionality, binary vs multiclass
+  - **Regression models**: Considers outliers, target distribution, feature relationships, non-linearity
+  - **Dataset size awareness**: Different recommendations for small (<1000), medium, and large datasets
+  - **Model-specific guidance**: Hyperparameter tuning suggestions, regularization recommendations
+  - **Priority-sorted**: Random Forest, XGBoost, LightGBM, Linear models, Neural Networks based on data
+  - Practical considerations for each recommended model
+
+- **DataAnalyzer Enhancements**
+  - `calculate_vif()`: Variance Inflation Factor calculation for multicollinearity detection (VIF > 10 indicates high collinearity)
+  - Moved from TargetAnalyzer to DataAnalyzer for better separation of concerns (VIF is target-independent)
+  - TargetAnalyzer delegates to DataAnalyzer for VIF, automatically excluding target column
+
+- **Comprehensive Test Suite**
+  - 87 new tests for TargetAnalyzer (total: 131 tests across all modules)
+  - `test_target_analyzer.py`: Complete coverage of all 8 phases
+    - Initialization and task detection (7 tests)
+    - Classification analysis (6 tests)
+    - Regression analysis (5 tests)
+    - Summary reports and caching (4 tests)
+    - Edge cases (3 tests)
+    - Phase 2: Classification statistical tests (6 tests)
+    - Phase 3: Regression correlations and MI (9 tests)
+    - Phase 4: Data quality and recommendations (8 tests)
+    - Phase 2-4: Integration tests (2 tests)
+    - Phase 5: Report generation and export (9 tests)
+    - Phase 7: Feature engineering suggestions (10 tests)
+    - Phase 8: Model recommendations (10 tests)
+
+- **Documentation**
+  - Comprehensive README update with TargetAnalyzer usage examples
+  - API Reference documentation for all 30+ TargetAnalyzer methods
+  - Updated CLAUDE.md with architecture decisions and implementation details
+  - FEATURE_PLAN.md documenting the phased development approach
+
+### Changed
+
+- **Architecture Refactoring**
+  - VIF calculation relocated from TargetAnalyzer to DataAnalyzer
+  - Improved separation of concerns: general EDA (DataAnalyzer) vs target-specific analysis (TargetAnalyzer)
+  - TargetAnalyzer now delegates to DataAnalyzer for VIF with automatic target exclusion
+
+- **Dependencies**
+  - Added `statsmodels>=0.14.0` for VIF calculation and advanced statistical tests
+
+- **README**
+  - Updated header to "feature-engineering-tk v2.1.0" with professional badges
+  - Added Features section highlighting 8 key capabilities
+  - Added "What's New in v2.1.0" section with comprehensive TargetAnalyzer documentation
+  - Expanded API Reference with complete method categorization
+  - Added Contributing, Support, and Links sections
+
+### Fixed
+
+- Minor improvements to error handling in statistical tests for edge cases (constant features, small datasets)
+
 ## [2.0.0] - 2025-11-22
 
 ### Breaking Changes
@@ -116,5 +228,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FeatureSelector` - Feature selection methods
 - Basic documentation and examples
 
+[2.1.0]: https://github.com/bluelion1999/feature_engineering_tk/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/bluelion1999/feature_engineering_tk/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/bluelion1999/feature_engineering_tk/releases/tag/v1.0.0

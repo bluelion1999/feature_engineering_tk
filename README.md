@@ -72,7 +72,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full list of changes.
 
 ```python
 import pandas as pd
-from feature_engineering_tk import DataAnalyzer, FeatureEngineer, DataPreprocessor, FeatureSelector, quick_analysis
+from feature_engineering_tk import DataAnalyzer, TargetAnalyzer, FeatureEngineer, DataPreprocessor, FeatureSelector, quick_analysis
 
 # Load your data
 df = pd.read_csv('your_data.csv')
@@ -124,7 +124,87 @@ analyzer.plot_correlation_heatmap()
 analyzer.plot_distributions(columns=['age', 'salary', 'score'])
 ```
 
-### 2. Data Preprocessing
+### 2. Target Analysis
+
+```python
+from feature_engineering_tk import TargetAnalyzer
+
+# Initialize with target column (auto-detects classification vs regression)
+analyzer = TargetAnalyzer(df, target_column='price', task='auto')
+
+# Or explicitly specify task type
+analyzer = TargetAnalyzer(df, target_column='category', task='classification')
+
+# Get task information
+task_info = analyzer.get_task_info()
+print(f"Task type: {task_info['task']}")
+
+# Classification Analysis
+if analyzer.task == 'classification':
+    # Class distribution and imbalance analysis
+    dist = analyzer.analyze_class_distribution()
+    imbalance_info = analyzer.get_class_imbalance_info()
+
+    # Feature-target relationships (Chi-square, ANOVA)
+    relationships = analyzer.analyze_feature_target_relationship()
+
+    # Class-wise statistics
+    class_stats = analyzer.analyze_class_wise_statistics()
+
+    # Visualizations
+    analyzer.plot_class_distribution(show=True)
+    analyzer.plot_feature_by_class('age', plot_type='box', show=True)
+
+# Regression Analysis
+if analyzer.task == 'regression':
+    # Target distribution with normality tests
+    target_dist = analyzer.analyze_target_distribution(normality_test=True)
+
+    # Feature correlations with target
+    correlations = analyzer.analyze_feature_correlations(method='pearson')
+
+    # Mutual information scores
+    mi_scores = analyzer.analyze_mutual_information()
+
+    # Visualizations
+    analyzer.plot_target_distribution(show=True)
+    analyzer.plot_feature_vs_target(max_features=6, show=True)
+
+    # Residual analysis (requires predictions)
+    residuals = analyzer.analyze_residuals(y_pred)
+    analyzer.plot_residuals(y_pred, show=True)
+
+# Common Analysis (both tasks)
+# Data quality checks
+quality = analyzer.analyze_data_quality()
+
+# Multicollinearity detection (VIF)
+vif_scores = analyzer.calculate_vif()
+
+# Intelligent feature engineering suggestions
+fe_suggestions = analyzer.suggest_feature_engineering()
+for sugg in fe_suggestions:
+    print(f"{sugg['priority'].upper()}: {sugg['feature']} - {sugg['suggestion']}")
+
+# ML model recommendations
+model_recs = analyzer.recommend_models()
+for rec in model_recs:
+    print(f"{rec['priority'].upper()}: {rec['model']}")
+    print(f"  Why: {rec['reason']}")
+
+# Actionable recommendations
+recommendations = analyzer.generate_recommendations()
+
+# Generate comprehensive report
+report = analyzer.generate_full_report()
+
+# Export report in multiple formats
+analyzer.export_report('analysis.html', format='html')
+analyzer.export_report('analysis.md', format='markdown')
+analyzer.export_report('analysis.json', format='json')
+```
+
+### 3. Data Preprocessing
 
 ```python
 from feature_engineering_tk import DataPreprocessor
@@ -180,7 +260,7 @@ preprocessor.apply_custom_function('text', lambda x: x.lower(), new_column='text
 cleaned_df = preprocessor.get_dataframe()
 ```
 
-### 3. Feature Engineering
+### 4. Feature Engineering
 
 ```python
 from feature_engineering_tk import FeatureEngineer
@@ -279,7 +359,7 @@ engineer.create_flag_features(
 engineered_df = engineer.get_dataframe()
 ```
 
-### 4. Feature Selection
+### 5. Feature Selection
 
 ```python
 from feature_engineering_tk import FeatureSelector, select_features_auto
@@ -338,7 +418,7 @@ auto_selected_df = select_features_auto(
 )
 ```
 
-### 5. Complete Pipeline Example
+### 6. Complete Pipeline Example
 
 ```python
 import pandas as pd

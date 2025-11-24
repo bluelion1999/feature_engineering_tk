@@ -1,12 +1,41 @@
-# MLToolkit
+# feature-engineering-tk v2.1.0
 
-A comprehensive Python toolkit for feature engineering and rudimentary data analysis to prepare dataframes for machine learning.
+[![PyPI version](https://badge.fury.io/py/feature-engineering-tk.svg)](https://badge.fury.io/py/feature-engineering-tk)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A comprehensive Python toolkit for feature engineering and advanced data analysis to prepare dataframes for machine learning. Provides intelligent automation for ML workflows including statistical analysis, feature engineering suggestions, and model recommendations.
+
+## Features
+
+- **Smart Data Analysis**: Automatic EDA with comprehensive statistics and visualizations
+- **Target-Aware Analysis**: Advanced statistical analysis that auto-detects classification vs regression tasks
+- **Intelligent Recommendations**: Automated feature engineering suggestions based on data characteristics
+- **Model Recommendations**: ML algorithm suggestions tailored to your dataset
+- **Complete Preprocessing**: Handle missing values, outliers, duplicates with 8+ strategies
+- **Feature Engineering**: 12+ transformation methods including encoding, scaling, binning, datetime extraction
+- **Feature Selection**: 6+ selection methods with automatic pipeline
+- **Report Generation**: Export comprehensive analysis reports in HTML, Markdown, or JSON
 
 ## Installation
 
 ```bash
 pip install feature-engineering-tk
 ```
+
+**Requirements:** Python 3.8+
+
+## What's New in v2.1.0
+
+**TargetAnalyzer** - A powerful new class for comprehensive target-aware statistical analysis:
+
+- **Auto Task Detection**: Automatically detects classification vs regression tasks
+- **Statistical Analysis**: Chi-square tests, ANOVA, correlations, mutual information
+- **Data Quality Checks**: Missing values, multicollinearity (VIF), potential data leakage detection
+- **Feature Engineering Suggestions**: Intelligent recommendations for transformations based on skewness, cardinality, and relationships
+- **Model Recommendations**: ML algorithm suggestions based on dataset size, imbalance, dimensionality, and other characteristics
+- **Comprehensive Reports**: Export analysis in HTML (with CSS styling), Markdown, or JSON formats
+- **87 New Tests**: Extensive test coverage for all new functionality (131 total tests)
 
 ## Breaking Changes (v2.0.0)
 
@@ -468,7 +497,10 @@ y = df_final['target']
 
 ### DataAnalyzer
 
-- `get_basic_info()`: Get basic dataframe information
+General-purpose exploratory data analysis (no target column required).
+
+**Core Methods:**
+- `get_basic_info()`: Get basic dataframe information (shape, dtypes, memory)
 - `get_missing_summary()`: Get summary of missing values
 - `get_numeric_summary()`: Get statistics for numeric columns
 - `get_categorical_summary()`: Get summary for categorical columns
@@ -476,10 +508,49 @@ y = df_final['target']
 - `detect_outliers_zscore()`: Detect outliers using Z-score
 - `get_correlation_matrix()`: Get correlation matrix
 - `get_high_correlations()`: Find highly correlated feature pairs
-- `get_cardinality_info()`: Get cardinality information
-- `plot_missing_values()`: Visualize missing values
+- `calculate_vif()`: Calculate Variance Inflation Factor for multicollinearity detection
+- `get_cardinality_info()`: Get cardinality information for categorical features
+
+**Visualization Methods:**
+- `plot_missing_values()`: Visualize missing values heatmap
 - `plot_correlation_heatmap()`: Plot correlation heatmap
-- `plot_distributions()`: Plot feature distributions
+- `plot_distributions()`: Plot feature distributions (histograms/KDE)
+
+### TargetAnalyzer
+
+Advanced target-aware analysis for ML tasks (requires target column).
+
+**Initialization:**
+- `TargetAnalyzer(df, target_column, task='auto')`: Auto-detects classification vs regression
+
+**Task Information:**
+- `get_task_info()`: Get detected task type and target column information
+
+**Classification Methods:**
+- `analyze_class_distribution()`: Class counts, percentages, imbalance ratios
+- `get_class_imbalance_info()`: Detailed imbalance analysis with severity levels
+- `analyze_feature_target_relationship()`: Chi-square and ANOVA tests
+- `analyze_class_wise_statistics()`: Feature statistics per class
+- `plot_class_distribution()`: Visualize class distribution
+- `plot_feature_by_class()`: Box/violin/histogram plots by class
+
+**Regression Methods:**
+- `analyze_target_distribution()`: Target statistics with normality tests (Shapiro-Wilk, Anderson-Darling)
+- `analyze_feature_correlations()`: Pearson/Spearman correlations with target
+- `analyze_residuals()`: Residual analysis (MAE, RMSE, R², normality)
+- `plot_target_distribution()`: Target histogram and Q-Q plot
+- `plot_feature_vs_target()`: Scatter plots with regression lines
+- `plot_residuals()`: Residual plots (residuals vs predicted, Q-Q plot)
+
+**Common Methods (Both Tasks):**
+- `analyze_mutual_information()`: Feature importance via mutual information
+- `analyze_data_quality()`: Missing values, constant features, leakage detection
+- `calculate_vif()`: Multicollinearity detection (auto-excludes target)
+- `suggest_feature_engineering()`: Intelligent feature transformation recommendations
+- `recommend_models()`: ML algorithm recommendations based on data characteristics
+- `generate_recommendations()`: Actionable recommendations with priority levels
+- `generate_full_report()`: Comprehensive analysis dictionary
+- `export_report()`: Export to HTML/Markdown/JSON formats
 
 ### DataPreprocessor
 
@@ -521,6 +592,22 @@ y = df_final['target']
 - `get_feature_importance_df()`: Get feature scores dataframe
 - `apply_selection()`: Apply selection to dataframe
 
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Support
+
+- **Documentation**: See usage examples above
+- **Issues**: [GitHub Issues](https://github.com/bluelion1999/feature_engineering_tk/issues)
+- **PyPI**: [feature-engineering-tk](https://pypi.org/project/feature-engineering-tk/)
+
+## Links
+
+- **GitHub Repository**: https://github.com/bluelion1999/feature_engineering_tk
+- **PyPI Package**: https://pypi.org/project/feature-engineering-tk/
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) file for details

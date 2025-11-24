@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
 from typing import List, Optional, Dict, Any
+from scipy import stats
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -290,6 +291,382 @@ class DataAnalyzer:
             plt.show()
 
         return fig
+
+
+class TargetAnalyzer:
+    """
+    Target-aware analysis class for classification and regression tasks.
+
+    Provides comprehensive statistical analysis when a target column is specified,
+    including task-specific metrics, distributions, and visualizations.
+
+    Automatically detects task type (classification vs regression) based on target
+    column characteristics, or accepts explicit task specification.
+    """
+
+    def __init__(self, df: pd.DataFrame, target_column: str, task: str = 'auto'):
+        """
+        Initialize TargetAnalyzer with a dataframe and target column.
+
+        Args:
+            df: Input pandas DataFrame
+            target_column: Name of the target variable column
+            task: Task type ('classification', 'regression', or 'auto').
+                  Default 'auto' will detect based on target characteristics.
+
+        Raises:
+            TypeError: If df is not a pandas DataFrame
+            ValueError: If target_column not in dataframe or invalid task specified
+        """
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("Input must be a pandas DataFrame")
+        if df.empty:
+            logger.warning("Initializing with empty DataFrame")
+        if target_column not in df.columns:
+            raise ValueError(f"Target column '{target_column}' not found in dataframe")
+        if task not in ['auto', 'classification', 'regression']:
+            raise ValueError("task must be 'auto', 'classification', or 'regression'")
+
+        self.df = df.copy()
+        self.target_column = target_column
+        self._analysis_cache = {}
+
+        # Detect or set task type
+        if task == 'auto':
+            self.task = self._detect_task()
+            logger.info(f"Auto-detected task type: {self.task}")
+        else:
+            self.task = task
+            logger.info(f"Task type set to: {self.task}")
+
+    def _detect_task(self) -> str:
+        """
+        Automatically detect whether this is a classification or regression task.
+
+        Returns:
+            str: 'classification' or 'regression'
+        """
+        target = self.df[self.target_column].dropna()
+
+        if len(target) == 0:
+            logger.warning("Target column is empty, defaulting to classification")
+            return 'classification'
+
+        # Check if numeric
+        if pd.api.types.is_numeric_dtype(target):
+            unique_count = target.nunique()
+            unique_ratio = unique_count / len(target)
+
+            # Heuristics for classification vs regression
+            if unique_count == 2:
+                return 'classification'
+            elif unique_count <= 20 or unique_ratio < 0.05:
+                return 'classification'
+            else:
+                return 'regression'
+        else:
+            return 'classification'
+
+    def get_task_info(self) -> Dict[str, Any]:
+        """
+        Get information about the detected/specified task.
+
+        Returns:
+            Dict containing task type, target column info, and class information
+            for classification tasks
+        """
+        target = self.df[self.target_column]
+
+        info = {
+            'task': self.task,
+            'target_column': self.target_column,
+            'target_dtype': str(target.dtype),
+            'unique_values': target.nunique(),
+            'missing_count': target.isnull().sum(),
+            'missing_percent': (target.isnull().sum() / len(target) * 100)
+        }
+
+        if self.task == 'classification':
+            info['classes'] = sorted(target.dropna().unique().tolist())
+            info['class_count'] = len(info['classes'])
+
+        return info
+
+    def analyze_class_distribution(self) -> pd.DataFrame:
+        """
+        Analyze class distribution for classification tasks.
+
+        Returns:
+            DataFrame with columns: class, count, percentage, imbalance_ratio
+            Empty DataFrame if task is not classification
+        """
+        if self.task != 'classification':
+            logger.warning("analyze_class_distribution() is only available for classification tasks")
+            return pd.DataFrame()
+
+        if 'class_distribution' in self._analysis_cache:
+            return self._analysis_cache['class_distribution']
+
+        target = self.df[self.target_column].dropna()
+        value_counts = target.value_counts()
+
+        distribution = pd.DataFrame({
+            'class': value_counts.index,
+            'count': value_counts.values,
+            'percentage': (value_counts.values / len(target) * 100)
+        }).reset_index(drop=True)
+
+        majority_count = distribution['count'].max()
+        distribution['imbalance_ratio'] = majority_count / distribution['count']
+
+        self._analysis_cache['class_distribution'] = distribution
+        return distribution
+
+    def get_class_imbalance_info(self) -> Dict[str, Any]:
+        """
+        Get detailed class imbalance information for classification tasks.
+
+        Returns:
+            Dict containing imbalance metrics, severity, and recommendations
+            Empty dict if task is not classification
+        """
+        if self.task != 'classification':
+            logger.warning("get_class_imbalance_info() is only available for classification tasks")
+            return {}
+
+        dist = self.analyze_class_distribution()
+
+        if dist.empty:
+            return {}
+
+        majority_class = dist.loc[dist['count'].idxmax(), 'class']
+        minority_class = dist.loc[dist['count'].idxmin(), 'class']
+        imbalance_ratio = dist['count'].max() / dist['count'].min()
+
+        info = {
+            'is_balanced': imbalance_ratio <= 1.5,
+            'imbalance_ratio': imbalance_ratio,
+            'majority_class': majority_class,
+            'majority_count': int(dist['count'].max()),
+            'minority_class': minority_class,
+            'minority_count': int(dist['count'].min()),
+        }
+
+        # Severity and recommendations
+        if imbalance_ratio > 3:
+            info['severity'] = 'severe'
+            info['recommendation'] = 'Consider using SMOTE, class weights, or stratified sampling'
+        elif imbalance_ratio > 1.5:
+            info['severity'] = 'moderate'
+            info['recommendation'] = 'Consider using class weights or stratified sampling'
+        else:
+            info['severity'] = 'none'
+            info['recommendation'] = 'Classes are well balanced'
+
+        return info
+
+    def analyze_target_distribution(self) -> Dict[str, Any]:
+        """
+        Analyze target distribution for regression tasks.
+
+        Returns:
+            Dict containing comprehensive statistics including mean, median, std,
+            skewness, kurtosis, and normality test results
+            Empty dict if task is not regression
+        """
+        if self.task != 'regression':
+            logger.warning("analyze_target_distribution() is only available for regression tasks")
+            return {}
+
+        if 'target_distribution' in self._analysis_cache:
+            return self._analysis_cache['target_distribution']
+
+        target = self.df[self.target_column].dropna()
+
+        distribution = {
+            'count': len(target),
+            'mean': target.mean(),
+            'median': target.median(),
+            'std': target.std(),
+            'min': target.min(),
+            'max': target.max(),
+            'range': target.max() - target.min(),
+            'q25': target.quantile(0.25),
+            'q75': target.quantile(0.75),
+            'iqr': target.quantile(0.75) - target.quantile(0.25),
+            'skewness': target.skew(),
+            'kurtosis': target.kurtosis()
+        }
+
+        # Normality test (sample if dataset is large)
+        if len(target) >= 3:
+            try:
+                sample_size = min(5000, len(target))
+                sample = target.sample(sample_size, random_state=42)
+                shapiro_stat, shapiro_p = stats.shapiro(sample)
+                distribution['shapiro_stat'] = shapiro_stat
+                distribution['shapiro_pvalue'] = shapiro_p
+                distribution['is_normal'] = shapiro_p > 0.05
+            except Exception as e:
+                logger.warning(f"Could not compute normality test: {e}")
+
+        self._analysis_cache['target_distribution'] = distribution
+        return distribution
+
+    def plot_class_distribution(self, figsize: tuple = (10, 6), show: bool = True):
+        """
+        Plot class distribution for classification tasks.
+
+        Args:
+            figsize: Figure size as (width, height)
+            show: If True, display the plot. Default True.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object, or None if not classification
+        """
+        if self.task != 'classification':
+            logger.warning("plot_class_distribution() is only available for classification tasks")
+            return None
+
+        dist = self.analyze_class_distribution()
+
+        if dist.empty:
+            logger.warning("No data available for plotting")
+            return None
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+
+        # Bar chart
+        ax1.bar(dist['class'].astype(str), dist['count'], edgecolor='black')
+        ax1.set_xlabel('Class')
+        ax1.set_ylabel('Count')
+        ax1.set_title('Class Distribution (Counts)')
+        ax1.tick_params(axis='x', rotation=45)
+
+        # Pie chart
+        colors = plt.cm.Set3(range(len(dist)))
+        ax2.pie(dist['percentage'], labels=dist['class'], autopct='%1.1f%%',
+                colors=colors, startangle=90)
+        ax2.set_title('Class Distribution (Percentage)')
+
+        plt.tight_layout()
+
+        if show:
+            plt.show()
+
+        return fig
+
+    def plot_target_distribution(self, figsize: tuple = (12, 5), show: bool = True):
+        """
+        Plot target distribution for regression tasks.
+
+        Args:
+            figsize: Figure size as (width, height)
+            show: If True, display the plot. Default True.
+
+        Returns:
+            matplotlib.figure.Figure: The figure object, or None if not regression
+        """
+        if self.task != 'regression':
+            logger.warning("plot_target_distribution() is only available for regression tasks")
+            return None
+
+        target = self.df[self.target_column].dropna()
+
+        if len(target) == 0:
+            logger.warning("No data available for plotting")
+            return None
+
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+        # Histogram with mean/median lines
+        axes[0].hist(target, bins=30, edgecolor='black', alpha=0.7)
+        axes[0].axvline(target.mean(), color='red', linestyle='--', linewidth=2,
+                       label=f'Mean: {target.mean():.2f}')
+        axes[0].axvline(target.median(), color='green', linestyle='--', linewidth=2,
+                       label=f'Median: {target.median():.2f}')
+        axes[0].set_xlabel(self.target_column)
+        axes[0].set_ylabel('Frequency')
+        axes[0].set_title(f'Distribution of {self.target_column}')
+        axes[0].legend()
+
+        # Q-Q plot
+        stats.probplot(target, dist="norm", plot=axes[1])
+        axes[1].set_title('Q-Q Plot')
+
+        plt.tight_layout()
+
+        if show:
+            plt.show()
+
+        return fig
+
+    def generate_summary_report(self) -> str:
+        """
+        Generate a comprehensive text summary report.
+
+        Returns:
+            str: Formatted text report with task-specific statistics
+        """
+        lines = []
+        lines.append("=" * 80)
+        lines.append("TARGET ANALYSIS REPORT")
+        lines.append("=" * 80)
+        lines.append("")
+
+        task_info = self.get_task_info()
+        lines.append(f"Task Type: {task_info['task'].upper()}")
+        lines.append(f"Target Column: {task_info['target_column']}")
+        lines.append(f"Target Data Type: {task_info['target_dtype']}")
+        lines.append(f"Unique Values: {task_info['unique_values']}")
+        lines.append(f"Missing Values: {task_info['missing_count']} ({task_info['missing_percent']:.2f}%)")
+        lines.append("")
+
+        if self.task == 'classification':
+            lines.append("=" * 80)
+            lines.append("CLASS DISTRIBUTION")
+            lines.append("=" * 80)
+
+            dist = self.analyze_class_distribution()
+            lines.append(dist.to_string(index=False))
+            lines.append("")
+
+            imbalance_info = self.get_class_imbalance_info()
+            lines.append("=" * 80)
+            lines.append("CLASS IMBALANCE ANALYSIS")
+            lines.append("=" * 80)
+            lines.append(f"Balanced: {'Yes' if imbalance_info['is_balanced'] else 'No'}")
+            lines.append(f"Imbalance Ratio: {imbalance_info['imbalance_ratio']:.2f}")
+            lines.append(f"Severity: {imbalance_info['severity'].upper()}")
+            lines.append(f"Majority Class: {imbalance_info['majority_class']} ({imbalance_info['majority_count']} samples)")
+            lines.append(f"Minority Class: {imbalance_info['minority_class']} ({imbalance_info['minority_count']} samples)")
+            lines.append(f"Recommendation: {imbalance_info['recommendation']}")
+
+        elif self.task == 'regression':
+            lines.append("=" * 80)
+            lines.append("TARGET DISTRIBUTION")
+            lines.append("=" * 80)
+
+            dist = self.analyze_target_distribution()
+            lines.append(f"Count: {dist['count']}")
+            lines.append(f"Mean: {dist['mean']:.4f}")
+            lines.append(f"Median: {dist['median']:.4f}")
+            lines.append(f"Std Dev: {dist['std']:.4f}")
+            lines.append(f"Min: {dist['min']:.4f}")
+            lines.append(f"Max: {dist['max']:.4f}")
+            lines.append(f"Range: {dist['range']:.4f}")
+            lines.append(f"IQR: {dist['iqr']:.4f}")
+            lines.append(f"Skewness: {dist['skewness']:.4f}")
+            lines.append(f"Kurtosis: {dist['kurtosis']:.4f}")
+
+            if 'is_normal' in dist:
+                lines.append(f"Normality (Shapiro-Wilk p-value): {dist['shapiro_pvalue']:.4f}")
+                lines.append(f"Appears Normal: {'Yes' if dist['is_normal'] else 'No'}")
+
+        lines.append("")
+        lines.append("=" * 80)
+
+        return "\n".join(lines)
 
 
 def quick_analysis(df: pd.DataFrame) -> None:

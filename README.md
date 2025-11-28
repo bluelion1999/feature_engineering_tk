@@ -35,7 +35,6 @@ pip install feature-engineering-tk
 - **Feature Engineering Suggestions**: Intelligent recommendations for transformations based on skewness, cardinality, and relationships
 - **Model Recommendations**: ML algorithm suggestions based on dataset size, imbalance, dimensionality, and other characteristics
 - **Comprehensive Reports**: Export analysis in HTML (with CSS styling), Markdown, or JSON formats
-- **87 New Tests**: Extensive test coverage for all new functionality (131 total tests)
 
 ## Breaking Changes (v2.0.0)
 

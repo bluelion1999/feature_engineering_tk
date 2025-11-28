@@ -449,6 +449,12 @@ preprocessor.handle_missing_values(strategy='mean', inplace=True)
 - Defensive validation
 - Clear, descriptive variable names
 
+### README Guidelines
+- **Do NOT include testing information** (test counts, coverage details, pytest commands)
+- Testing documentation belongs in CLAUDE.md only, not in user-facing README
+- README should focus on features, usage, and API documentation for end-users
+- Keep README focused on what users can do with the library, not internal development practices
+
 ---
 
 ## Git Configuration

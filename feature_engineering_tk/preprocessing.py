@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import logging
 from typing import List, Optional, Union, Dict, Any
+from datetime import datetime
 
 from .exceptions import (
     ValidationError,
@@ -49,6 +50,39 @@ class DataPreprocessor:
         if df.empty:
             logger.warning("Initializing with empty DataFrame")
         self.df = df.copy()
+        self._operation_history: List[Dict[str, Any]] = []
+
+    def _log_operation(self, method_name: str, parameters: Dict[str, Any],
+                       rows_before: int, cols_before: int,
+                       rows_after: int, cols_after: int,
+                       additional_info: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Log a preprocessing operation to the history.
+
+        Args:
+            method_name: Name of the method that was called
+            parameters: Dictionary of parameters passed to the method
+            rows_before: Number of rows before operation
+            cols_before: Number of columns before operation
+            rows_after: Number of rows after operation
+            cols_after: Number of columns after operation
+            additional_info: Optional dictionary with method-specific info
+        """
+        operation = {
+            'timestamp': datetime.now().isoformat(),
+            'method': method_name,
+            'parameters': parameters,
+            'shape_before': (rows_before, cols_before),
+            'shape_after': (rows_after, cols_after),
+            'rows_changed': rows_after - rows_before,
+            'cols_changed': cols_after - cols_before,
+        }
+
+        if additional_info:
+            operation['details'] = additional_info
+
+        self._operation_history.append(operation)
+        logger.debug(f"Logged operation: {method_name}")
 
     def handle_missing_values(self, strategy: str = 'drop',
                                columns: Optional[List[str]] = None,
@@ -76,6 +110,9 @@ class DataPreprocessor:
                            'forward_fill', 'backward_fill', 'interpolate']
         if strategy not in valid_strategies:
             raise InvalidStrategyError(strategy, valid_strategies)
+
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
 
         df_result = self.df if inplace else self.df.copy()
 
@@ -146,6 +183,15 @@ class DataPreprocessor:
                 df_result[numeric_cols] = df_result[numeric_cols].interpolate(method=method or 'linear')
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='handle_missing_values',
+                parameters={'strategy': strategy, 'columns': columns, 'fill_value': fill_value, 'method': method},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -167,6 +213,9 @@ class DataPreprocessor:
         if keep not in ['first', 'last', False]:
             raise ValueError("keep must be 'first', 'last', or False")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         if subset is not None:
@@ -175,16 +224,26 @@ class DataPreprocessor:
                 logger.warning(f"Subset columns not found: {invalid_cols}")
                 subset = [col for col in subset if col in df_result.columns] or None
 
-        rows_before = len(df_result)
+        rows_before_drop = len(df_result)
         df_result = df_result.drop_duplicates(subset=subset, keep=keep)
-        rows_removed = rows_before - len(df_result)
+        rows_removed = rows_before_drop - len(df_result)
 
         if rows_removed > 0:
-            logger.info(f"Removed {rows_removed} duplicate rows ({rows_removed/rows_before*100:.1f}%)")
+            logger.info(f"Removed {rows_removed} duplicate rows ({rows_removed/rows_before_drop*100:.1f}%)")
         else:
             logger.info("No duplicate rows found")
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='remove_duplicates',
+                parameters={'subset': subset, 'keep': keep},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after,
+                additional_info={'rows_removed': rows_removed}
+            )
             self.df = df_result
             return self
         return df_result
@@ -226,6 +285,9 @@ class DataPreprocessor:
             raise ValueError("threshold must be positive")
         if not isinstance(columns, list):
             raise TypeError("columns must be a list")
+
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
 
         df_result = self.df if inplace else self.df.copy()
 
@@ -284,7 +346,18 @@ class DataPreprocessor:
                     df_result.loc[outlier_mask, col] = np.nan
 
         if inplace:
-            self.df = df_result.reset_index(drop=True)
+            df_result = df_result.reset_index(drop=True)
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='handle_outliers',
+                parameters={'columns': columns, 'method': method, 'action': action,
+                           'multiplier': multiplier, 'threshold': threshold, 'replace_with': replace_with},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
+            self.df = df_result
             return self
         return df_result.reset_index(drop=True)
 
@@ -434,6 +507,9 @@ class DataPreprocessor:
         Returns:
             Filtered DataFrame
         """
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         try:
@@ -451,7 +527,17 @@ class DataPreprocessor:
             raise
 
         if inplace:
-            self.df = df_result.reset_index(drop=True)
+            df_result = df_result.reset_index(drop=True)
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='filter_rows',
+                parameters={'condition': 'custom_condition'},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
+            self.df = df_result
             return self
         return df_result.reset_index(drop=True)
 
@@ -469,6 +555,9 @@ class DataPreprocessor:
         if not isinstance(columns, list):
             raise TypeError("columns must be a list")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         existing_cols = [col for col in columns if col in df_result.columns]
@@ -480,6 +569,16 @@ class DataPreprocessor:
             df_result = df_result.drop(columns=existing_cols)
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='drop_columns',
+                parameters={'columns': columns},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after,
+                additional_info={'columns_dropped': existing_cols}
+            )
             self.df = df_result
             return self
         return df_result
@@ -678,6 +777,9 @@ class DataPreprocessor:
         if invalid_ops:
             raise InvalidMethodError(f"Invalid operations: {invalid_ops}", valid_ops)
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         for col in columns:
@@ -709,6 +811,15 @@ class DataPreprocessor:
             logger.info(f"Applied {len(operations)} string operations to column '{col}'")
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='clean_string_columns',
+                parameters={'columns': columns, 'operations': operations},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -963,6 +1074,139 @@ class DataPreprocessor:
             self.df = df_result
             return self
         return df_result
+
+    # ==================== Operation History & Summary ====================
+
+    def get_preprocessing_summary(self) -> str:
+        """
+        Get a formatted summary of all preprocessing operations.
+
+        Returns:
+            Formatted string summary of preprocessing history
+
+        Example:
+            >>> summary = preprocessor.get_preprocessing_summary()
+            >>> print(summary)
+        """
+        if not self._operation_history:
+            return "No preprocessing operations have been performed yet."
+
+        lines = ["=" * 80, "PREPROCESSING SUMMARY", "=" * 80, ""]
+
+        for i, op in enumerate(self._operation_history, 1):
+            lines.append(f"{i}. {op['method'].upper()}")
+            lines.append(f"   Timestamp: {op['timestamp']}")
+            lines.append(f"   Shape: {op['shape_before']} → {op['shape_after']}")
+            lines.append(f"   Rows changed: {op['rows_changed']:+d}, Columns changed: {op['cols_changed']:+d}")
+
+            # Add parameters
+            if op['parameters']:
+                lines.append(f"   Parameters:")
+                for key, value in op['parameters'].items():
+                    if value is not None:
+                        # Truncate long lists for readability
+                        if isinstance(value, list) and len(value) > 5:
+                            value_str = f"{value[:5]}... ({len(value)} total)"
+                        else:
+                            value_str = str(value)
+                        lines.append(f"      - {key}: {value_str}")
+
+            # Add additional details if present
+            if 'details' in op:
+                lines.append(f"   Details:")
+                for key, value in op['details'].items():
+                    lines.append(f"      - {key}: {value}")
+
+            lines.append("")  # Blank line between operations
+
+        # Summary statistics
+        total_ops = len(self._operation_history)
+        initial_shape = self._operation_history[0]['shape_before']
+        final_shape = self._operation_history[-1]['shape_after']
+        total_rows_changed = final_shape[0] - initial_shape[0]
+        total_cols_changed = final_shape[1] - initial_shape[1]
+
+        lines.append("=" * 80)
+        lines.append(f"TOTAL OPERATIONS: {total_ops}")
+        lines.append(f"Initial shape: {initial_shape}")
+        lines.append(f"Final shape: {final_shape}")
+        lines.append(f"Total rows changed: {total_rows_changed:+d}")
+        lines.append(f"Total columns changed: {total_cols_changed:+d}")
+        lines.append("=" * 80)
+
+        return "\n".join(lines)
+
+    def export_summary(self, filepath: str, format: str = 'markdown') -> None:
+        """
+        Export preprocessing summary to a file.
+
+        Args:
+            filepath: Path to save the summary file
+            format: Export format ('text', 'markdown', or 'json')
+
+        Raises:
+            ValueError: If invalid format specified
+            ValidationError: If no operations to export
+
+        Example:
+            >>> preprocessor.export_summary('preprocessing_report.md', format='markdown')
+        """
+        valid_formats = ['text', 'markdown', 'json']
+        if format not in valid_formats:
+            raise ValueError(f"format must be one of {valid_formats}, got '{format}'")
+
+        if not self._operation_history:
+            raise ValidationError("No preprocessing operations to export")
+
+        if format == 'json':
+            import json
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'operations': self._operation_history,
+                    'summary': {
+                        'total_operations': len(self._operation_history),
+                        'initial_shape': self._operation_history[0]['shape_before'],
+                        'final_shape': self._operation_history[-1]['shape_after'],
+                    }
+                }, f, indent=2)
+            logger.info(f"Exported preprocessing summary to {filepath} (JSON format)")
+
+        elif format == 'markdown':
+            lines = ["# Preprocessing Summary\n"]
+            lines.append(f"**Total Operations:** {len(self._operation_history)}\n")
+            lines.append(f"**Initial Shape:** {self._operation_history[0]['shape_before']}\n")
+            lines.append(f"**Final Shape:** {self._operation_history[-1]['shape_after']}\n")
+            lines.append("\n## Operations\n")
+
+            for i, op in enumerate(self._operation_history, 1):
+                lines.append(f"### {i}. {op['method']}\n")
+                lines.append(f"- **Timestamp:** {op['timestamp']}")
+                lines.append(f"- **Shape:** {op['shape_before']} → {op['shape_after']}")
+                lines.append(f"- **Rows changed:** {op['rows_changed']:+d}")
+                lines.append(f"- **Columns changed:** {op['cols_changed']:+d}")
+
+                if op['parameters']:
+                    lines.append(f"- **Parameters:**")
+                    for key, value in op['parameters'].items():
+                        if value is not None:
+                            lines.append(f"  - `{key}`: {value}")
+
+                if 'details' in op:
+                    lines.append(f"- **Details:**")
+                    for key, value in op['details'].items():
+                        lines.append(f"  - {key}: {value}")
+
+                lines.append("")  # Blank line
+
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(lines))
+            logger.info(f"Exported preprocessing summary to {filepath} (Markdown format)")
+
+        else:  # text format
+            summary_text = self.get_preprocessing_summary()
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(summary_text)
+            logger.info(f"Exported preprocessing summary to {filepath} (text format)")
 
     def get_dataframe(self) -> pd.DataFrame:
         """

@@ -10,7 +10,7 @@ long_description = (this_directory / "README.md").read_text(encoding='utf-8')
 
 setup(
     name='feature-engineering-tk',
-    version='2.0.0',
+    version='2.1.1',
     author='bluelion1999',
     author_email='',
     description='A comprehensive Python toolkit for feature engineering and data analysis',
@@ -44,6 +44,7 @@ setup(
         'scipy>=1.9.0',
         'matplotlib>=3.6.0',
         'seaborn>=0.12.0',
+        'statsmodels>=0.14.0',
     ],
     extras_require={
         'dev': [

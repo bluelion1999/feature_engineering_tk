@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2025-11-30
+
+### Fixed
+
+- **Critical Configuration Issues**
+  - Fixed version mismatch: Updated `setup.py` from 2.0.0 to match 2.1.1 across all configuration files
+  - Added missing `statsmodels>=0.14.0` dependency to `requirements.txt` and `setup.py`
+  - Fixed `.gitignore` pattern conflict: Removed `test_*.py` pattern that conflicted with tracked test files
+
+### Improved
+
+- **Code Quality**
+  - Removed unused `pointbiserialr` import from `data_analysis.py`
+  - Replaced inefficient `.iterrows()` with `.to_dict('records')` for better performance (2 instances in `data_analysis.py`)
+
+- **Documentation**
+  - Added comprehensive `FeatureSelector` class docstring with attributes and usage examples
+  - Added detailed `FeatureSelector.__init__()` docstring with Args/Raises sections
+  - Added input validation to `FeatureSelector.__init__()` (TypeError and empty DataFrame checks)
+
+- **Type Hints**
+  - Enhanced type hint imports in `feature_selection.py` (added Dict, Callable, Any)
+  - Updated `feature_scores` type hint from `dict` to `Dict[str, Dict[str, float]]`
+  - Added explicit type hints to `selected_features: List[str]`
+  - Improved `score_func` parameter type hint to `Optional[Union[str, Callable]]`
+
+- **Configuration Files**
+  - Fixed `MANIFEST.in` case sensitivity issue: `claude.md` → `CLAUDE.md`
+
+All 131 tests pass successfully. Changes maintain backward compatibility.
+
 ## [2.1.0] - 2025-11-24
 
 ### Added
@@ -228,6 +259,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FeatureSelector` - Feature selection methods
 - Basic documentation and examples
 
+[2.1.1]: https://github.com/bluelion1999/feature_engineering_tk/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/bluelion1999/feature_engineering_tk/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/bluelion1999/feature_engineering_tk/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/bluelion1999/feature_engineering_tk/releases/tag/v1.0.0

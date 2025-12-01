@@ -1,4 +1,4 @@
-# feature-engineering-tk v2.1.0
+# feature-engineering-tk v2.1.1
 
 [![PyPI version](https://badge.fury.io/py/feature-engineering-tk.svg)](https://badge.fury.io/py/feature-engineering-tk)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -24,6 +24,15 @@ pip install feature-engineering-tk
 ```
 
 **Requirements:** Python 3.8+
+
+## What's New in v2.1.1
+
+**Bug Fixes & Code Quality:**
+- Fixed version mismatch across configuration files
+- Added missing `statsmodels>=0.14.0` dependency
+- Removed unused imports and improved performance
+- Enhanced type hints and documentation for `FeatureSelector`
+- Fixed configuration file issues (.gitignore, MANIFEST.in)
 
 ## What's New in v2.1.0
 

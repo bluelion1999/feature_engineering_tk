@@ -5,7 +5,7 @@ import seaborn as sns
 import logging
 from typing import List, Optional, Dict, Any, Union, Tuple
 from scipy import stats
-from scipy.stats import chi2_contingency, pointbiserialr, f_oneway, pearsonr, spearmanr
+from scipy.stats import chi2_contingency, f_oneway, pearsonr, spearmanr
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 from sklearn.metrics import r2_score
 from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -1243,24 +1243,28 @@ class TargetAnalyzer:
             corr_df = self.analyze_feature_correlations()
             if not corr_df.empty:
                 perfect_corr = corr_df[corr_df['abs_correlation'] > 0.99]
-                for _, row in perfect_corr.iterrows():
-                    leakage_suspects.append({
+                leakage_suspects.extend([
+                    {
                         'feature': row['feature'],
                         'reason': f'Near-perfect correlation ({row["correlation"]:.4f})',
                         'severity': 'high'
-                    })
+                    }
+                    for row in perfect_corr.to_dict('records')
+                ])
 
         elif self.task == 'classification':
             # Check for features with very low p-values and high test statistics
             rel_df = self.analyze_feature_target_relationship()
             if not rel_df.empty:
                 suspicious = rel_df[rel_df['pvalue'] < 1e-10]
-                for _, row in suspicious.iterrows():
-                    leakage_suspects.append({
+                leakage_suspects.extend([
+                    {
                         'feature': row['feature'],
                         'reason': f'Extremely significant relationship (p={row["pvalue"]:.2e})',
                         'severity': 'medium'
-                    })
+                    }
+                    for row in suspicious.to_dict('records')
+                ])
 
         results['leakage_suspects'] = leakage_suspects
 

@@ -6,19 +6,54 @@ from sklearn.feature_selection import (
     mutual_info_regression, chi2, VarianceThreshold
 )
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Callable, Any
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
 class FeatureSelector:
+    """
+    Feature selection class for identifying and selecting relevant features.
+
+    Provides multiple feature selection methods including variance-based,
+    correlation-based, statistical tests, and tree-based importance.
+    Supports both supervised and unsupervised feature selection approaches.
+
+    Attributes:
+        df (pd.DataFrame): Internal copy of the DataFrame
+        target_column (Optional[str]): Target column for supervised selection methods
+        selected_features (List[str]): List of currently selected feature names
+        feature_scores (Dict[str, Dict[str, float]]): Dictionary of feature scores from selection methods
+
+    Example:
+        >>> selector = FeatureSelector(df, target_column='target')
+        >>> selected = selector.select_by_variance(threshold=0.1)
+        >>> selected = selector.select_by_target_correlation(threshold=0.3)
+        >>> auto_selected = select_features_auto(df, 'target', task='classification')
+    """
 
     def __init__(self, df: pd.DataFrame, target_column: Optional[str] = None):
+        """
+        Initialize FeatureSelector with a DataFrame.
+
+        Args:
+            df: Input pandas DataFrame
+            target_column: Optional target column name for supervised feature selection.
+                          If None, only unsupervised methods can be used.
+
+        Raises:
+            TypeError: If df is not a pandas DataFrame
+        """
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("Input must be a pandas DataFrame")
+        if df.empty:
+            logger.warning("Initializing FeatureSelector with empty DataFrame")
+
         self.df = df.copy()
         self.target_column = target_column
-        self.selected_features = []
-        self.feature_scores = {}
+        self.selected_features: List[str] = []
+        self.feature_scores: Dict[str, Dict[str, float]] = {}
 
     def select_by_variance(self, threshold: float = 0.0,
                            exclude_columns: Optional[List[str]] = None) -> List[str]:
@@ -111,7 +146,7 @@ class FeatureSelector:
 
     def select_by_statistical_test(self, k: int = 10,
                                     task: str = 'classification',
-                                    score_func: Optional[str] = None,
+                                    score_func: Optional[Union[str, Callable]] = None,
                                     exclude_columns: Optional[List[str]] = None) -> List[str]:
         """Select features using statistical tests."""
         if not self.target_column:

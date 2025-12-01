@@ -19,8 +19,22 @@ class DataPreprocessor:
     """
     Data preprocessing class for cleaning and preparing data.
 
+    Provides comprehensive preprocessing capabilities including:
+    - Missing value handling (8 strategies)
+    - Outlier detection and handling
+    - String/text preprocessing and cleaning
+    - Data quality validation and reporting
+    - Duplicate and constant column removal
+    - Type conversions and data filtering
+
     All transformation methods support inplace=False by default to avoid
     unintended mutations. Set inplace=True to modify the internal dataframe.
+
+    New in v2.2.0:
+        - String preprocessing methods (clean_string_columns, handle_whitespace_variants)
+        - Data validation methods (validate_data_quality, detect_infinite_values)
+        - Missing value indicators (create_missing_indicators)
+        - Enhanced error handling and logging across all methods
     """
 
     def __init__(self, df: pd.DataFrame):
@@ -79,7 +93,17 @@ class DataPreprocessor:
             return df_result
 
         if strategy == 'drop':
+            rows_before = len(df_result)
             df_result = df_result.dropna(subset=columns)
+            rows_removed = rows_before - len(df_result)
+            if rows_removed > rows_before * 0.3:
+                logger.warning(
+                    f"Dropping missing values removed {rows_removed} rows "
+                    f"({rows_removed/rows_before*100:.1f}% of data). "
+                    f"Consider using an imputation strategy instead."
+                )
+            elif rows_removed > 0:
+                logger.info(f"Dropped {rows_removed} rows with missing values ({rows_removed/rows_before*100:.1f}%)")
 
         elif strategy == 'fill_value':
             if fill_value is None:
@@ -151,7 +175,14 @@ class DataPreprocessor:
                 logger.warning(f"Subset columns not found: {invalid_cols}")
                 subset = [col for col in subset if col in df_result.columns] or None
 
+        rows_before = len(df_result)
         df_result = df_result.drop_duplicates(subset=subset, keep=keep)
+        rows_removed = rows_before - len(df_result)
+
+        if rows_removed > 0:
+            logger.info(f"Removed {rows_removed} duplicate rows ({rows_removed/rows_before*100:.1f}%)")
+        else:
+            logger.info("No duplicate rows found")
 
         if inplace:
             self.df = df_result
@@ -193,6 +224,8 @@ class DataPreprocessor:
             raise ValueError("multiplier must be positive")
         if threshold <= 0:
             raise ValueError("threshold must be positive")
+        if not isinstance(columns, list):
+            raise TypeError("columns must be a list")
 
         df_result = self.df if inplace else self.df.copy()
 
@@ -223,7 +256,16 @@ class DataPreprocessor:
                 z_scores = np.abs((df_result[col] - df_result[col].mean()) / col_std)
                 outlier_mask = z_scores > threshold
 
+            # Log outlier detection
+            outlier_count = outlier_mask.sum()
+            outlier_pct = outlier_count / len(df_result) * 100
+            logger.info(f"Detected {outlier_count} outliers in '{col}' ({outlier_pct:.1f}%) using {method} method")
+
             if action == 'remove':
+                # Warn if removing too many rows
+                if outlier_count > len(df_result) * 0.3:
+                    logger.warning(f"Removing outliers from '{col}' would remove {outlier_pct:.1f}% of data. "
+                                 f"Consider using action='cap' or 'replace' instead.")
                 df_result = df_result[~outlier_mask]
 
             elif action == 'cap':
@@ -308,7 +350,12 @@ class DataPreprocessor:
             logger.warning(f"Column '{column}' is not numeric")
             return df_result if not inplace else self.df
 
+        # Validate lower < upper
+        if lower is not None and upper is not None and lower >= upper:
+            raise ValueError(f"lower bound ({lower}) must be less than upper bound ({upper})")
+
         df_result[column] = df_result[column].clip(lower=lower, upper=upper)
+        logger.info(f"Clipped '{column}' to range [{lower}, {upper}]")
 
         # Fixed: Update self.df when inplace=True
         if inplace:
@@ -577,12 +624,345 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
+        # Validate n <= len(df)
+        if n is not None and n > len(df_result):
+            raise ValidationError(f"Cannot sample {n} rows from DataFrame with {len(df_result)} rows. "
+                                f"Use n <= {len(df_result)} or use frac parameter instead.")
+
         df_result = df_result.sample(n=n, frac=frac, random_state=random_state)
+        logger.info(f"Sampled {len(df_result)} rows from DataFrame")
 
         if inplace:
             self.df = df_result.reset_index(drop=True)
             return self.df
         return df_result.reset_index(drop=True)
+
+    # ==================== String/Text Preprocessing ====================
+
+    def clean_string_columns(self, columns: List[str],
+                             operations: List[str] = ['strip', 'lower'],
+                             inplace: bool = False) -> pd.DataFrame:
+        """
+        Clean string columns with common operations.
+
+        Args:
+            columns: String columns to clean
+            operations: List of operations to apply:
+                - 'strip': Remove leading/trailing whitespace
+                - 'lower': Convert to lowercase
+                - 'upper': Convert to uppercase
+                - 'title': Title case
+                - 'remove_punctuation': Remove punctuation
+                - 'remove_digits': Remove numeric characters
+                - 'remove_extra_spaces': Collapse multiple spaces
+            inplace: If True, modifies internal dataframe. Default False.
+
+        Returns:
+            DataFrame with cleaned strings
+
+        Raises:
+            TypeError: If columns or operations is not a list
+            InvalidMethodError: If invalid operation specified
+
+        Example:
+            >>> preprocessor.clean_string_columns(['name', 'city'], ['strip', 'lower'])
+        """
+        if not isinstance(columns, list):
+            raise TypeError("columns must be a list")
+        if not isinstance(operations, list):
+            raise TypeError("operations must be a list")
+
+        valid_ops = ['strip', 'lower', 'upper', 'title',
+                     'remove_punctuation', 'remove_digits', 'remove_extra_spaces']
+        invalid_ops = [op for op in operations if op not in valid_ops]
+        if invalid_ops:
+            raise InvalidMethodError(f"Invalid operations: {invalid_ops}", valid_ops)
+
+        df_result = self.df if inplace else self.df.copy()
+
+        for col in columns:
+            if col not in df_result.columns:
+                logger.warning(f"Column '{col}' not found, skipping")
+                continue
+
+            if df_result[col].dtype != 'object':
+                logger.warning(f"Column '{col}' is not string type, skipping")
+                continue
+
+            # Apply operations in order
+            for op in operations:
+                if op == 'strip':
+                    df_result[col] = df_result[col].str.strip()
+                elif op == 'lower':
+                    df_result[col] = df_result[col].str.lower()
+                elif op == 'upper':
+                    df_result[col] = df_result[col].str.upper()
+                elif op == 'title':
+                    df_result[col] = df_result[col].str.title()
+                elif op == 'remove_punctuation':
+                    df_result[col] = df_result[col].str.replace(r'[^\w\s]', '', regex=True)
+                elif op == 'remove_digits':
+                    df_result[col] = df_result[col].str.replace(r'\d+', '', regex=True)
+                elif op == 'remove_extra_spaces':
+                    df_result[col] = df_result[col].str.replace(r'\s+', ' ', regex=True)
+
+            logger.info(f"Applied {len(operations)} string operations to column '{col}'")
+
+        if inplace:
+            self.df = df_result
+            return self.df
+        return df_result
+
+    def handle_whitespace_variants(self, columns: List[str],
+                                    inplace: bool = False) -> pd.DataFrame:
+        """
+        Standardize whitespace variants in categorical columns.
+
+        Handles cases like 'New York', ' New York', 'New York ', '  New York  '
+        All become 'New York'
+
+        Args:
+            columns: Columns to standardize
+            inplace: If True, modifies internal dataframe. Default False.
+
+        Returns:
+            DataFrame with standardized strings
+
+        Example:
+            >>> preprocessor.handle_whitespace_variants(['city', 'category'])
+        """
+        if not isinstance(columns, list):
+            raise TypeError("columns must be a list")
+
+        df_result = self.df if inplace else self.df.copy()
+
+        for col in columns:
+            if col not in df_result.columns:
+                logger.warning(f"Column '{col}' not found, skipping")
+                continue
+
+            if df_result[col].dtype != 'object':
+                logger.warning(f"Column '{col}' is not string type, skipping")
+                continue
+
+            before_unique = df_result[col].nunique()
+            df_result[col] = df_result[col].str.strip()
+            df_result[col] = df_result[col].str.replace(r'\s+', ' ', regex=True)
+            after_unique = df_result[col].nunique()
+
+            if before_unique != after_unique:
+                logger.info(f"Standardized '{col}': {before_unique} -> {after_unique} unique values")
+
+        if inplace:
+            self.df = df_result
+            return self.df
+        return df_result
+
+    def extract_string_length(self, columns: List[str],
+                              suffix: str = '_length',
+                              inplace: bool = False) -> pd.DataFrame:
+        """
+        Create length features from string columns.
+
+        Args:
+            columns: String columns to measure
+            suffix: Suffix for length column names
+            inplace: If True, modifies internal dataframe. Default False.
+
+        Returns:
+            DataFrame with added length columns
+
+        Example:
+            >>> preprocessor.extract_string_length(['name', 'description'])
+            # Creates 'name_length' and 'description_length' columns
+        """
+        if not isinstance(columns, list):
+            raise TypeError("columns must be a list")
+
+        df_result = self.df if inplace else self.df.copy()
+
+        for col in columns:
+            if col not in df_result.columns:
+                logger.warning(f"Column '{col}' not found, skipping")
+                continue
+
+            if df_result[col].dtype != 'object':
+                logger.warning(f"Column '{col}' is not string type, skipping")
+                continue
+
+            new_col = f"{col}{suffix}"
+            df_result[new_col] = df_result[col].str.len()
+            logger.info(f"Created length feature '{new_col}'")
+
+        if inplace:
+            self.df = df_result
+            return self.df
+        return df_result
+
+    # ==================== Data Validation Methods ====================
+
+    def validate_data_quality(self) -> Dict[str, Any]:
+        """
+        Comprehensive data quality validation report.
+
+        Returns:
+            Dictionary with validation results:
+                - shape: DataFrame dimensions
+                - missing_values: Columns with missing data
+                - duplicate_rows: Count of duplicates
+                - constant_columns: Columns with single value
+                - high_cardinality_columns: Columns with >95% unique values
+                - infinite_values: Columns with inf/-inf values
+                - issues_found: List of detected issues
+
+        Example:
+            >>> quality = preprocessor.validate_data_quality()
+            >>> print(quality['issues_found'])
+        """
+        validation = {
+            'shape': self.df.shape,
+            'missing_values': {},
+            'duplicate_rows': 0,
+            'constant_columns': [],
+            'high_cardinality_columns': [],
+            'infinite_values': {},
+            'issues_found': []
+        }
+
+        # Missing values
+        missing = self.df.isnull().sum()
+        validation['missing_values'] = {
+            col: int(count) for col, count in missing.items() if count > 0
+        }
+        if validation['missing_values']:
+            validation['issues_found'].append(
+                f"{len(validation['missing_values'])} columns have missing values"
+            )
+
+        # Duplicates
+        validation['duplicate_rows'] = int(self.df.duplicated().sum())
+        if validation['duplicate_rows'] > 0:
+            validation['issues_found'].append(
+                f"{validation['duplicate_rows']} duplicate rows found"
+            )
+
+        # Constant columns
+        validation['constant_columns'] = [
+            col for col in self.df.columns
+            if self.df[col].nunique(dropna=False) <= 1
+        ]
+        if validation['constant_columns']:
+            validation['issues_found'].append(
+                f"{len(validation['constant_columns'])} constant columns found"
+            )
+
+        # High cardinality columns
+        for col in self.df.columns:
+            unique_ratio = self.df[col].nunique() / len(self.df)
+            if unique_ratio > 0.95 and len(self.df) > 10:
+                validation['high_cardinality_columns'].append(col)
+        if validation['high_cardinality_columns']:
+            validation['issues_found'].append(
+                f"{len(validation['high_cardinality_columns'])} high cardinality columns (>95% unique)"
+            )
+
+        # Infinite values
+        numeric_cols = self.df.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            inf_count = np.isinf(self.df[col]).sum()
+            if inf_count > 0:
+                validation['infinite_values'][col] = int(inf_count)
+        if validation['infinite_values']:
+            validation['issues_found'].append(
+                f"{len(validation['infinite_values'])} columns have infinite values"
+            )
+
+        if not validation['issues_found']:
+            validation['issues_found'].append("No major data quality issues detected")
+
+        logger.info(f"Data quality validation complete: {len(validation['issues_found'])} findings")
+        return validation
+
+    def detect_infinite_values(self, columns: Optional[List[str]] = None) -> Dict[str, int]:
+        """
+        Detect infinite values (np.inf, -np.inf) in numeric columns.
+
+        Args:
+            columns: Specific columns to check (None = all numeric columns)
+
+        Returns:
+            Dictionary mapping column names to count of infinite values
+
+        Example:
+            >>> inf_counts = preprocessor.detect_infinite_values()
+            >>> print(inf_counts)
+        """
+        if columns is None:
+            columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+        else:
+            if not isinstance(columns, list):
+                raise TypeError("columns must be a list")
+            # Validate columns are numeric
+            numeric_cols = self.df.select_dtypes(include=[np.number]).columns
+            columns = [col for col in columns if col in numeric_cols]
+
+        infinite_counts = {}
+        for col in columns:
+            if col not in self.df.columns:
+                logger.warning(f"Column '{col}' not found, skipping")
+                continue
+
+            inf_count = np.isinf(self.df[col]).sum()
+            if inf_count > 0:
+                infinite_counts[col] = int(inf_count)
+                logger.info(f"Column '{col}' has {inf_count} infinite values")
+
+        if not infinite_counts:
+            logger.info("No infinite values detected")
+
+        return infinite_counts
+
+    def create_missing_indicators(self, columns: List[str],
+                                   suffix: str = '_was_missing',
+                                   inplace: bool = False) -> pd.DataFrame:
+        """
+        Create binary indicator columns for missing values.
+
+        Args:
+            columns: Columns to create indicators for
+            suffix: Suffix for indicator column names
+            inplace: If True, modifies internal dataframe. Default False.
+
+        Returns:
+            DataFrame with added indicator columns (0/1)
+
+        Example:
+            >>> preprocessor.create_missing_indicators(['age', 'income'])
+            # Creates 'age_was_missing' and 'income_was_missing' columns
+        """
+        if not isinstance(columns, list):
+            raise TypeError("columns must be a list")
+
+        df_result = self.df if inplace else self.df.copy()
+
+        for col in columns:
+            if col not in df_result.columns:
+                logger.warning(f"Column '{col}' not found, skipping")
+                continue
+
+            new_col = f"{col}{suffix}"
+            df_result[new_col] = self.df[col].isnull().astype(int)
+
+            missing_count = df_result[new_col].sum()
+            if missing_count > 0:
+                logger.info(f"Created indicator '{new_col}' ({missing_count} missing values)")
+            else:
+                logger.info(f"Created indicator '{new_col}' (no missing values)")
+
+        if inplace:
+            self.df = df_result
+            return self.df
+        return df_result
 
     def get_dataframe(self) -> pd.DataFrame:
         """

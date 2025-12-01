@@ -1,4 +1,4 @@
-# feature-engineering-tk v2.1.1
+# feature-engineering-tk v2.2.0
 
 [![PyPI version](https://badge.fury.io/py/feature-engineering-tk.svg)](https://badge.fury.io/py/feature-engineering-tk)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -13,6 +13,10 @@ A comprehensive Python toolkit for feature engineering and advanced data analysi
 - **Intelligent Recommendations**: Automated feature engineering suggestions based on data characteristics
 - **Model Recommendations**: ML algorithm suggestions tailored to your dataset
 - **Complete Preprocessing**: Handle missing values, outliers, duplicates with 8+ strategies
+- **String Preprocessing**: Clean and extract features from text columns (NEW v2.2.0)
+- **Data Validation**: Comprehensive quality checks and infinite value detection (NEW v2.2.0)
+- **Method Chaining**: Fluent API for chaining preprocessing operations (NEW v2.2.0)
+- **Operation Tracking**: Automatic logging and export of preprocessing history (NEW v2.2.0)
 - **Feature Engineering**: 12+ transformation methods including encoding, scaling, binning, datetime extraction
 - **Feature Selection**: 6+ selection methods with automatic pipeline
 - **Report Generation**: Export comprehensive analysis reports in HTML, Markdown, or JSON
@@ -24,6 +28,97 @@ pip install feature-engineering-tk
 ```
 
 **Requirements:** Python 3.8+
+
+## What's New in v2.2.0
+
+**DataPreprocessor Enhancements - Major Quality-of-Life Improvements:**
+
+### 🎯 Method Chaining Support
+Chain preprocessing operations for cleaner, more readable code:
+
+```python
+preprocessor = DataPreprocessor(df)
+preprocessor\
+    .handle_missing_values(strategy='mean', inplace=True)\
+    .remove_duplicates(inplace=True)\
+    .clean_string_columns(['name'], operations=['strip', 'lower'], inplace=True)\
+    .drop_columns(['id'], inplace=True)
+```
+
+### 📊 Operation History Tracking
+Automatically track all preprocessing operations for full reproducibility:
+
+```python
+# Perform operations (automatically logged when inplace=True)
+preprocessor.handle_missing_values(strategy='mean', inplace=True)
+preprocessor.remove_duplicates(inplace=True)
+
+# Get formatted summary
+summary = preprocessor.get_preprocessing_summary()
+print(summary)
+# Output:
+# ================================================================================
+# PREPROCESSING SUMMARY
+# ================================================================================
+# 1. HANDLE_MISSING_VALUES
+#    Timestamp: 2025-11-30T14:23:45.123456
+#    Shape: (1000, 10) → (1000, 10)
+#    Parameters: strategy='mean', columns=['age', 'income']
+# 2. REMOVE_DUPLICATES
+#    Shape: (1000, 10) → (987, 10)
+#    Details: rows_removed=13
+# ================================================================================
+
+# Export preprocessing history to file
+preprocessor.export_summary('preprocessing_report.md', format='markdown')
+preprocessor.export_summary('preprocessing_report.json', format='json')
+```
+
+### 🧹 String Preprocessing
+New methods for cleaning and extracting features from text columns:
+
+```python
+# Clean string columns
+preprocessor.clean_string_columns(
+    columns=['name', 'city'],
+    operations=['strip', 'lower', 'remove_punctuation'],
+    inplace=True
+)
+
+# Standardize whitespace variants
+preprocessor.handle_whitespace_variants(['category'], inplace=True)
+
+# Extract string length features
+preprocessor.extract_string_length(['description'], suffix='_len', inplace=True)
+```
+
+### ✅ Data Validation
+Proactive data quality checks:
+
+```python
+# Comprehensive quality report
+quality_report = preprocessor.validate_data_quality()
+# Returns: {
+#   'missing_values': {'age': 25, 'income': 10},
+#   'constant_columns': ['id'],
+#   'infinite_values': {'score': 3},
+#   'duplicate_count': 5
+# }
+
+# Detect infinite values
+infinite_vals = preprocessor.detect_infinite_values()
+
+# Create missing value indicators
+preprocessor.create_missing_indicators(['age', 'income'], inplace=True)
+# Creates: age_was_missing, income_was_missing columns
+```
+
+### 🛡️ Enhanced Error Handling
+- Better parameter validation across all methods
+- Warnings for potentially destructive operations (e.g., removing >30% of data)
+- Improved logging throughout
+
+**Test Coverage:** Added 42 comprehensive tests (now 173 total tests across the library)
 
 ## What's New in v2.1.1
 

@@ -483,5 +483,217 @@ class TestMethodChaining:
         assert preprocessor.sample_data(n=3, inplace=True) is preprocessor
 
 
+class TestOperationHistory:
+    """Test suite for operation history and summary tracking."""
+
+    @pytest.fixture
+    def sample_df(self):
+        """Create sample dataframe for testing."""
+        return pd.DataFrame({
+            'a': [1, 2, 3, 4, 5, 1],  # Has duplicates
+            'b': [10, 20, None, 40, 50, 10],  # Has missing
+            'c': ['x', 'y', 'z', 'w', 'v', 'x'],
+            'd': [100, 200, 300, 400, 500, 100]
+        })
+
+    def test_history_initialized_empty(self, sample_df):
+        """Test that operation history starts empty."""
+        preprocessor = DataPreprocessor(sample_df)
+        assert preprocessor._operation_history == []
+
+    def test_history_tracks_single_operation(self, sample_df):
+        """Test that single operation is tracked correctly."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_duplicates(inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        op = preprocessor._operation_history[0]
+
+        assert op['method'] == 'remove_duplicates'
+        assert 'timestamp' in op
+        assert op['shape_before'] == (6, 4)
+        assert op['shape_after'] == (5, 4)
+        assert op['rows_changed'] == -1
+        assert op['cols_changed'] == 0
+
+    def test_history_tracks_multiple_operations(self, sample_df):
+        """Test that multiple operations are tracked in order."""
+        preprocessor = DataPreprocessor(sample_df)
+
+        preprocessor.remove_duplicates(inplace=True)
+        preprocessor.handle_missing_values(strategy='drop', inplace=True)
+        preprocessor.drop_columns(['d'], inplace=True)
+
+        assert len(preprocessor._operation_history) == 3
+
+        assert preprocessor._operation_history[0]['method'] == 'remove_duplicates'
+        assert preprocessor._operation_history[1]['method'] == 'handle_missing_values'
+        assert preprocessor._operation_history[2]['method'] == 'drop_columns'
+
+        # Check final shape
+        assert preprocessor._operation_history[-1]['shape_after'] == (4, 3)
+
+    def test_history_includes_parameters(self, sample_df):
+        """Test that operation parameters are recorded."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.handle_missing_values(strategy='mean', columns=['b'], inplace=True)
+
+        op = preprocessor._operation_history[0]
+        assert op['parameters']['strategy'] == 'mean'
+        assert op['parameters']['columns'] == ['b']
+
+    def test_history_includes_additional_info(self, sample_df):
+        """Test that additional info is recorded when provided."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_duplicates(inplace=True)
+
+        op = preprocessor._operation_history[0]
+        assert 'details' in op
+        assert 'rows_removed' in op['details']
+
+    def test_history_not_tracked_when_inplace_false(self, sample_df):
+        """Test that operations are NOT tracked when inplace=False."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_duplicates(inplace=False)
+        preprocessor.drop_columns(['d'], inplace=False)
+
+        assert len(preprocessor._operation_history) == 0
+
+    def test_get_summary_empty_history(self, sample_df):
+        """Test summary when no operations performed."""
+        preprocessor = DataPreprocessor(sample_df)
+        summary = preprocessor.get_preprocessing_summary()
+
+        assert "No preprocessing operations" in summary
+
+    def test_get_summary_with_operations(self, sample_df):
+        """Test summary generation with operations."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_duplicates(inplace=True)
+        preprocessor.drop_columns(['d'], inplace=True)
+
+        summary = preprocessor.get_preprocessing_summary()
+
+        assert "PREPROCESSING SUMMARY" in summary
+        assert "REMOVE_DUPLICATES" in summary
+        assert "DROP_COLUMNS" in summary
+        assert "TOTAL OPERATIONS: 2" in summary
+        assert "Initial shape: (6, 4)" in summary
+        assert "Final shape: (5, 3)" in summary
+
+    def test_get_summary_shows_shape_changes(self, sample_df):
+        """Test that summary correctly shows shape changes."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.handle_outliers(['a'], method='iqr', action='remove', inplace=True)
+
+        summary = preprocessor.get_preprocessing_summary()
+        assert "Shape:" in summary
+        assert "Rows changed:" in summary
+
+    def test_export_summary_text_format(self, sample_df, tmp_path):
+        """Test exporting summary as text file."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_duplicates(inplace=True)
+
+        filepath = tmp_path / "summary.txt"
+        preprocessor.export_summary(str(filepath), format='text')
+
+        assert filepath.exists()
+        content = filepath.read_text()
+        assert "PREPROCESSING SUMMARY" in content
+        assert "REMOVE_DUPLICATES" in content
+
+    def test_export_summary_markdown_format(self, sample_df, tmp_path):
+        """Test exporting summary as markdown file."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_duplicates(inplace=True)
+        preprocessor.drop_columns(['d'], inplace=True)
+
+        filepath = tmp_path / "summary.md"
+        preprocessor.export_summary(str(filepath), format='markdown')
+
+        assert filepath.exists()
+        content = filepath.read_text()
+        assert "# Preprocessing Summary" in content
+        assert "## Operations" in content
+        assert "remove_duplicates" in content
+
+    def test_export_summary_json_format(self, sample_df, tmp_path):
+        """Test exporting summary as JSON file."""
+        import json
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_duplicates(inplace=True)
+
+        filepath = tmp_path / "summary.json"
+        preprocessor.export_summary(str(filepath), format='json')
+
+        assert filepath.exists()
+        with open(filepath) as f:
+            data = json.load(f)
+
+        assert 'operations' in data
+        assert 'summary' in data
+        assert len(data['operations']) == 1
+        assert data['operations'][0]['method'] == 'remove_duplicates'
+
+    def test_export_summary_invalid_format(self, sample_df):
+        """Test that invalid format raises ValueError."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_duplicates(inplace=True)
+
+        with pytest.raises(ValueError, match="format must be one of"):
+            preprocessor.export_summary('test.txt', format='invalid')
+
+    def test_export_summary_no_operations_raises_error(self, sample_df):
+        """Test that exporting with no operations raises ValidationError."""
+        from feature_engineering_tk.exceptions import ValidationError
+        preprocessor = DataPreprocessor(sample_df)
+
+        with pytest.raises(ValidationError, match="No preprocessing operations"):
+            preprocessor.export_summary('test.txt')
+
+    def test_history_complex_workflow(self, sample_df):
+        """Test history tracking through complex workflow."""
+        preprocessor = DataPreprocessor(sample_df)
+
+        # Perform multiple operations
+        preprocessor.remove_duplicates(inplace=True)
+        preprocessor.handle_missing_values(strategy='mean', inplace=True)
+        preprocessor.clean_string_columns(['c'], operations=['strip', 'lower'], inplace=True)
+        preprocessor.drop_columns(['d'], inplace=True)
+
+        # Verify history
+        assert len(preprocessor._operation_history) == 4
+
+        # Verify cumulative shape changes
+        initial_shape = preprocessor._operation_history[0]['shape_before']
+        final_shape = preprocessor._operation_history[-1]['shape_after']
+
+        assert initial_shape == (6, 4)
+        assert final_shape[0] == 5  # One duplicate removed
+        assert final_shape[1] == 3  # One column dropped
+
+    def test_history_tracks_filter_rows(self, sample_df):
+        """Test that filter_rows operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.filter_rows(lambda df: df['a'] > 2, inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        op = preprocessor._operation_history[0]
+        assert op['method'] == 'filter_rows'
+        assert op['rows_changed'] < 0  # Rows were removed
+
+    def test_history_tracks_handle_outliers(self, sample_df):
+        """Test that handle_outliers operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.handle_outliers(['a'], method='iqr', action='remove', inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        op = preprocessor._operation_history[0]
+        assert op['method'] == 'handle_outliers'
+        assert 'method' in op['parameters']
+        assert 'action' in op['parameters']
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

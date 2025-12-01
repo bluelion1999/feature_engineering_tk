@@ -207,7 +207,7 @@ class TestStringPreprocessing:
             inplace=True
         )
 
-        assert result is preprocessor.df
+        assert result is preprocessor  # Returns self for chaining
         assert preprocessor.df['name'].tolist() == ['alice', 'bob', 'charlie', 'david']
 
     def test_handle_whitespace_variants(self, string_df):
@@ -384,6 +384,103 @@ class TestEnhancedErrorHandling:
 
         result = preprocessor.handle_outliers(['x'], method='iqr', action='remove')
         assert len(result) < len(df)  # Outlier should be removed
+
+
+class TestMethodChaining:
+    """Tests for fluent API method chaining."""
+
+    def test_basic_chaining(self):
+        """Test basic method chaining with inplace=True."""
+        df = pd.DataFrame({
+            'x': [1, 1, 2, 3, 4],  # Actual duplicate rows
+            'y': [5, 5, 6, 7, 8],
+            'name': ['  Alice  ', '  Alice  ', 'Charlie', 'David', 'Eve']
+        })
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor\
+            .remove_duplicates(inplace=True)\
+            .clean_string_columns(['name'], operations=['strip', 'lower'], inplace=True)
+
+        # Should return the preprocessor instance
+        assert isinstance(result, DataPreprocessor)
+        # Should have modified internal df
+        assert len(preprocessor.df) == 4  # One duplicate removed
+        assert preprocessor.df['name'].iloc[0] == 'alice'
+
+    def test_chaining_multiple_operations(self):
+        """Test chaining multiple different operations."""
+        df = pd.DataFrame({
+            'age': [25, np.nan, 35, 100, 45],  # Has missing and outlier
+            'income': [50000, 60000, 70000, 70000, 80000],  # Has duplicate row
+            'name': ['  Alice  ', '  Bob  ', 'Charlie', 'David', 'Eve']
+        })
+        # Add duplicate row
+        df = pd.concat([df, df.iloc[[1]]], ignore_index=True)
+
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor\
+            .handle_missing_values(strategy='mean', columns=['age'], inplace=True)\
+            .remove_duplicates(inplace=True)\
+            .handle_outliers(['age'], method='iqr', action='cap', inplace=True)\
+            .clean_string_columns(['name'], operations=['strip', 'lower'], inplace=True)
+
+        assert isinstance(result, DataPreprocessor)
+        assert preprocessor.df['age'].isna().sum() == 0  # No missing values
+        assert len(preprocessor.df) == 5  # Duplicate removed
+        assert all(preprocessor.df['name'].str.islower())  # All lowercase
+        assert all(preprocessor.df['name'].str.strip() == preprocessor.df['name'])  # All stripped
+
+    def test_chaining_returns_self(self):
+        """Test that chaining actually returns self, not a copy."""
+        df = pd.DataFrame({'x': [1, 2, 3]})
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.remove_duplicates(inplace=True)
+
+        assert result is preprocessor  # Same object
+        assert id(result) == id(preprocessor)
+
+    def test_non_inplace_breaks_chain(self):
+        """Test that inplace=False returns DataFrame, not preprocessor."""
+        df = pd.DataFrame({'x': [1, 2, 3]})
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.remove_duplicates(inplace=False)
+
+        assert isinstance(result, pd.DataFrame)
+        assert not isinstance(result, DataPreprocessor)
+
+    def test_chaining_with_new_methods(self):
+        """Test chaining with newly added string and validation methods."""
+        df = pd.DataFrame({
+            'name': ['  Alice  ', 'Bob', 'Charlie'],
+            'age': [25, np.nan, 35]
+        })
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor\
+            .create_missing_indicators(['age'], inplace=True)\
+            .handle_whitespace_variants(['name'], inplace=True)\
+            .extract_string_length(['name'], inplace=True)
+
+        assert isinstance(result, DataPreprocessor)
+        assert 'age_was_missing' in preprocessor.df.columns
+        assert 'name_length' in preprocessor.df.columns
+
+    def test_chaining_all_methods(self):
+        """Test that all methods support chaining."""
+        df = pd.DataFrame({
+            'a': [1, 2, 3, 4, 5],
+            'b': ['x', 'y', 'z', 'w', 'v'],
+            'c': [10, 20, 30, 40, 50]
+        })
+        preprocessor = DataPreprocessor(df)
+
+        # Test various methods return self
+        assert preprocessor.clip_values('a', lower=2, upper=4, inplace=True) is preprocessor
+        assert preprocessor.sample_data(n=3, inplace=True) is preprocessor
 
 
 if __name__ == '__main__':

@@ -147,7 +147,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def remove_duplicates(self, subset: Optional[List[str]] = None,
@@ -186,7 +186,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def handle_outliers(self, columns: List[str],
@@ -285,7 +285,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result.reset_index(drop=True)
-            return self.df
+            return self
         return df_result.reset_index(drop=True)
 
     def convert_dtypes(self, dtype_map: Dict[str, str], inplace: bool = False) -> pd.DataFrame:
@@ -322,7 +322,7 @@ class DataPreprocessor:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def clip_values(self, column: str, lower: Optional[float] = None,
@@ -360,7 +360,7 @@ class DataPreprocessor:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def remove_constant_columns(self, inplace: bool = False) -> pd.DataFrame:
@@ -383,7 +383,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def remove_high_cardinality_columns(self, threshold: float = 0.95,
@@ -419,7 +419,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def filter_rows(self, condition: Union[pd.Series, callable],
@@ -452,7 +452,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result.reset_index(drop=True)
-            return self.df
+            return self
         return df_result.reset_index(drop=True)
 
     def drop_columns(self, columns: List[str], inplace: bool = False) -> pd.DataFrame:
@@ -481,7 +481,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def rename_columns(self, rename_map: Dict[str, str], inplace: bool = False) -> pd.DataFrame:
@@ -504,7 +504,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def reorder_columns(self, column_order: List[str], inplace: bool = False) -> pd.DataFrame:
@@ -535,7 +535,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def apply_custom_function(self, column: str, func: callable,
@@ -575,7 +575,7 @@ class DataPreprocessor:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def reset_index_clean(self, inplace: bool = False) -> pd.DataFrame:
@@ -594,7 +594,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def sample_data(self, n: Optional[int] = None, frac: Optional[float] = None,
@@ -634,7 +634,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result.reset_index(drop=True)
-            return self.df
+            return self
         return df_result.reset_index(drop=True)
 
     # ==================== String/Text Preprocessing ====================
@@ -710,7 +710,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def handle_whitespace_variants(self, columns: List[str],
@@ -755,7 +755,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def extract_string_length(self, columns: List[str],
@@ -796,7 +796,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     # ==================== Data Validation Methods ====================
@@ -961,7 +961,7 @@ class DataPreprocessor:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def get_dataframe(self) -> pd.DataFrame:

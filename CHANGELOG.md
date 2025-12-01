@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-11-30
+
+### Added
+
+- **DataPreprocessor Enhancements** - Major quality-of-life improvements
+
+  - **Method Chaining Support**
+    - All preprocessing methods now return `self` when `inplace=True` (previously returned `self.df`)
+    - Enables fluent API pattern for cleaner, more readable code
+    - Example: `preprocessor.method1(inplace=True).method2(inplace=True).method3(inplace=True)`
+
+  - **Operation History Tracking**
+    - Automatic logging of all preprocessing operations when `inplace=True`
+    - `_operation_history`: Internal list tracking all operations with timestamps, parameters, and shape changes
+    - `get_preprocessing_summary()`: Returns formatted text summary of all operations
+    - `export_summary(filepath, format)`: Export preprocessing history to text/markdown/JSON formats
+    - Enables full reproducibility and documentation of preprocessing pipelines
+
+  - **String Preprocessing Methods (3 new methods)**
+    - `clean_string_columns()`: Clean string columns with 7 operations (strip, lower, upper, title, remove_punctuation, remove_digits, remove_extra_spaces)
+    - `handle_whitespace_variants()`: Standardize whitespace variants in categorical columns
+    - `extract_string_length()`: Create length features from string columns
+
+  - **Data Validation Methods (3 new methods)**
+    - `validate_data_quality()`: Comprehensive data quality report (missing values, constant columns, infinite values, duplicate count)
+    - `detect_infinite_values()`: Detect np.inf/-np.inf in numeric columns
+    - `create_missing_indicators()`: Create binary indicator columns for missing values
+
+  - **Enhanced Error Handling**
+    - Better parameter validation across all preprocessing methods
+    - Warnings for destructive operations (e.g., removing >30% of data)
+    - Enhanced logging throughout preprocessing methods
+
+### Changed
+
+- **Breaking Change**: `DataPreprocessor` methods now return `self` when `inplace=True` instead of `self.df`
+  - **Impact**: Code that assigns the return value when using `inplace=True` will now receive the preprocessor object instead of a DataFrame
+  - **Benefit**: Enables method chaining
+  - **Migration**: Use `.df` attribute to access DataFrame, or use method chaining
+  - Example:
+    ```python
+    # Before v2.2.0:
+    result = preprocessor.handle_missing_values(inplace=True)  # result was DataFrame
+
+    # After v2.2.0:
+    result = preprocessor.handle_missing_values(inplace=True)  # result is DataPreprocessor
+    df = result.df  # Access DataFrame via .df attribute
+
+    # Or use method chaining (recommended):
+    preprocessor.method1(inplace=True).method2(inplace=True)
+    ```
+
+### Tests
+
+- Added 42 comprehensive tests for new features (now 173 total tests)
+  - 7 tests for string preprocessing
+  - 6 tests for data validation
+  - 6 tests for enhanced error handling
+  - 6 tests for method chaining
+  - 17 tests for operation history tracking
+
+All 173 tests pass successfully.
+
 ## [2.1.1] - 2025-11-30
 
 ### Fixed

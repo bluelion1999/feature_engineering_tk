@@ -15,6 +15,41 @@
 
 ## Recent Major Changes
 
+### DataPreprocessor Enhancements (v2.2.0 - 2025-11-30)
+**Branch**: feature/preprocessor-enhancements
+
+1. **String Preprocessing Methods** (3 new methods):
+   - `clean_string_columns()`: 7 operations (strip, lower, upper, title, remove_punctuation, remove_digits, remove_extra_spaces)
+   - `handle_whitespace_variants()`: Standardize whitespace variants in categorical columns
+   - `extract_string_length()`: Create length features from string columns
+
+2. **Data Validation Methods** (3 new methods):
+   - `validate_data_quality()`: Comprehensive quality report (missing values, constant columns, infinite values)
+   - `detect_infinite_values()`: Detect np.inf/-np.inf in numeric columns
+   - `create_missing_indicators()`: Create binary indicator columns for missing values
+
+3. **Method Chaining Support**:
+   - All preprocessing methods now return `self` when `inplace=True`
+   - Enables fluent API pattern: `preprocessor.method1().method2().method3()`
+
+4. **Operation History Tracking**:
+   - Automatic logging of all preprocessing operations when `inplace=True`
+   - `get_preprocessing_summary()`: Returns formatted text summary
+   - `export_summary()`: Export to text/markdown/JSON formats
+   - Tracks: timestamps, parameters, shape changes, method-specific details
+
+5. **Enhanced Error Handling**:
+   - Better parameter validation across all methods
+   - Warnings for destructive operations (e.g., removing >30% of data)
+   - Improved logging throughout
+
+**Test Coverage**: Added 42 new tests (now 173 total tests)
+- 7 tests for string preprocessing
+- 6 tests for data validation
+- 6 tests for enhanced error handling
+- 6 tests for method chaining
+- 17 tests for operation history tracking
+
 ### Column Type Detection Enhancements (v2.2.0 - In Development, NOT YET RELEASED)
 **Branch**: feature/column-type-detection
 
@@ -41,7 +76,7 @@
    - Complements TargetAnalyzer's target-dependent suggestions (which require a target)
 
 **Testing** (CLAUDE.md only - DO NOT include in README):
-- Added 9 new tests (now 26 total tests in test_data_analysis.py)
+- Added 9 new tests (now 17 total tests in test_data_analysis.py)
 - 4 tests for categorical detection (binary, integer, low ratio, edge cases)
 - 5 tests for binning suggestions (skewed, uniform, outliers, thresholds, edge cases)
 - All tests passing ✅
@@ -116,7 +151,7 @@ class ClassName:
 ```python
 def method_name(self,
                 columns: Union[str, List[str]],
-                inplace: bool = False) -> pd.DataFrame:  # Default False
+                inplace: bool = False) -> Union[pd.DataFrame, 'ClassName']:
     """
     Brief description.
 
@@ -125,7 +160,7 @@ def method_name(self,
         inplace: If True, modifies internal dataframe. Default False.
 
     Returns:
-        Modified DataFrame
+        Self if inplace=True (enables chaining), otherwise modified DataFrame copy
 
     Raises:
         InvalidStrategyError: If strategy invalid
@@ -134,27 +169,41 @@ def method_name(self,
     if not isinstance(columns, list):
         raise TypeError("columns must be a list")
 
-    # 2. Handle inplace
+    # 2. Capture shape before operation (for history tracking)
+    rows_before, cols_before = self.df.shape
+
+    # 3. Handle inplace
     df_result = self.df if inplace else self.df.copy()
 
-    # 3. Validate data
+    # 4. Validate data
     invalid_cols = [col for col in columns if col not in df_result.columns]
     if invalid_cols:
         logger.warning(f"Columns not found: {invalid_cols}")
         columns = [col for col in columns if col in df_result.columns]
 
-    # 4. Edge cases
+    # 5. Edge cases
     if not columns:
         logger.warning("No valid columns to process")
-        return df_result if not inplace else self.df
+        return df_result if not inplace else self
 
-    # 5. Transform
+    # 6. Transform
     # ... actual logic ...
 
-    # 6. Return (CRITICAL: Update self.df when inplace=True)
+    # 7. Return (CRITICAL: Update self.df when inplace=True, return self for chaining)
     if inplace:
+        rows_after, cols_after = df_result.shape
+        # Log operation for history tracking (DataPreprocessor only)
+        if hasattr(self, '_log_operation'):
+            self._log_operation(
+                method_name='method_name',
+                parameters={'columns': columns},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
         self.df = df_result
-        return self.df
+        return self  # NEW v2.2.0: Return self for method chaining
     return df_result
 ```
 
@@ -304,13 +353,59 @@ report = analyzer.generate_summary_report()
 ### preprocessing.py
 **Class**: `DataPreprocessor`
 
+**State**: `self.df` (DataFrame), `self._operation_history` (List[Dict])
+
 **Key Features**:
 - Missing values: 8 strategies (drop, mean, median, mode, ffill, bfill, interpolate, fill_value)
 - Duplicates, outliers (with z-score div-by-zero protection)
 - Type conversion, clipping, filtering
 - Column operations (drop, rename, reorder)
+- **NEW (v2.2.0)**: String preprocessing (clean_string_columns, handle_whitespace_variants, extract_string_length)
+- **NEW (v2.2.0)**: Data validation (validate_data_quality, detect_infinite_values, create_missing_indicators)
+- **NEW (v2.2.0)**: Method chaining support (returns `self` when `inplace=True`)
+- **NEW (v2.2.0)**: Operation history tracking and summary export
+
+**Operation History Tracking (NEW v2.2.0)**:
+- Automatically logs all preprocessing operations when `inplace=True`
+- Tracks: method name, timestamp, parameters, shape changes, additional details
+- `get_preprocessing_summary()`: Returns formatted text summary of all operations
+- `export_summary(filepath, format)`: Export to text/markdown/JSON formats
+- Enables full reproducibility and documentation of preprocessing pipelines
 
 **All methods have `inplace=False` default**
+
+**Usage Pattern**:
+```python
+# Initialize
+preprocessor = DataPreprocessor(df)
+
+# Method chaining (NEW v2.2.0)
+preprocessor\
+    .handle_missing_values(strategy='mean', inplace=True)\
+    .remove_duplicates(inplace=True)\
+    .clean_string_columns(['name'], operations=['strip', 'lower'], inplace=True)\
+    .drop_columns(['id'], inplace=True)
+
+# Get preprocessing summary (NEW v2.2.0)
+summary = preprocessor.get_preprocessing_summary()
+print(summary)
+
+# Export summary to file (NEW v2.2.0)
+preprocessor.export_summary('preprocessing_report.md', format='markdown')
+preprocessor.export_summary('preprocessing_report.json', format='json')
+
+# Data validation (NEW v2.2.0)
+quality_report = preprocessor.validate_data_quality()
+infinite_vals = preprocessor.detect_infinite_values()
+preprocessor.create_missing_indicators(['age', 'income'], inplace=True)
+
+# String preprocessing (NEW v2.2.0)
+preprocessor.clean_string_columns(['name', 'city'],
+                                  operations=['strip', 'lower', 'remove_punctuation'],
+                                  inplace=True)
+preprocessor.handle_whitespace_variants(['category'], inplace=True)
+preprocessor.extract_string_length(['description'], suffix='_len', inplace=True)
+```
 
 ### feature_engineering.py
 **Class**: `FeatureEngineer`
@@ -395,8 +490,14 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 
 ## Testing
 
-**139 tests** across 6 test files:
-- `test_preprocessing.py`: 12 tests (inplace bugs, deprecated methods, div-by-zero)
+**182 tests** across 6 test files:
+- `test_preprocessing.py`: 53 tests
+  - 11 core tests (inplace bugs, deprecated methods, div-by-zero)
+  - 7 string preprocessing tests (v2.2.0)
+  - 6 data validation tests (v2.2.0)
+  - 6 enhanced error handling tests (v2.2.0)
+  - 6 method chaining tests (v2.2.0)
+  - 17 operation history tracking tests (v2.2.0)
 - `test_feature_engineering.py`: 13 tests (inplace bugs, transformer persistence)
 - `test_data_analysis.py`: 17 tests (div-by-zero protection, VIF calculation, **NEW v2.2.0**: categorical detection, binning suggestions)
 - `test_target_analyzer.py`: 87 tests (Phases 1-5,7-8: task detection, statistical tests, correlations, MI, VIF delegation, data quality, recommendations, report generation, feature engineering suggestions, model recommendations, integration tests)
@@ -434,8 +535,9 @@ Dev dependencies: pytest, pytest-cov, black, flake8, mypy
 2. **Inplace defaults to False** (matches pandas)
 3. **Validate then transform** (fail fast with clear errors)
 4. **Log, don't print** (except user-facing output functions)
-5. **Return DataFrame always** (enables method chaining at pandas level)
+5. **Return self when inplace=True** (enables method chaining) - NEW v2.2.0
 6. **Store fitted transformers** (enables production deployment)
+7. **Track operations automatically** (DataPreprocessor logs when inplace=True) - NEW v2.2.0
 
 ---
 
@@ -444,6 +546,9 @@ Dev dependencies: pytest, pytest-cov, black, flake8, mypy
 1. **Inplace default**: Changed from `True` → `False`
 2. **Exceptions**: Some `ValueError` → Custom exceptions (programmatically catchable)
 3. **Plotting**: Now returns `Figure` objects (was `None`)
+4. **Return value change (v2.2.0)**: Methods now return `self` when `inplace=True` (was `self.df`)
+   - **Impact**: Code expecting DataFrame when inplace=True needs update
+   - **Benefit**: Enables method chaining
 
 Migration:
 ```python
@@ -452,6 +557,18 @@ preprocessor.handle_missing_values(strategy='mean')
 
 # NEW (explicit):
 preprocessor.handle_missing_values(strategy='mean', inplace=True)
+
+# v2.2.0 Return Value Change:
+# OLD (before v2.2.0):
+result = preprocessor.handle_missing_values(strategy='mean', inplace=True)
+# result was a DataFrame (self.df)
+
+# NEW (v2.2.0+):
+result = preprocessor.handle_missing_values(strategy='mean', inplace=True)
+# result is now DataPreprocessor (self), enables chaining:
+preprocessor.handle_missing_values(strategy='mean', inplace=True)\
+           .remove_duplicates(inplace=True)\
+           .drop_columns(['id'], inplace=True)
 ```
 
 ---
@@ -459,10 +576,12 @@ preprocessor.handle_missing_values(strategy='mean', inplace=True)
 ## Common Pitfalls
 
 1. **Don't forget to update `self.df`** when `inplace=True`
-2. **Check for zero std/variance** before division
-3. **Validate numeric columns** before math operations
-4. **Use custom exceptions** for better error handling
-5. **Close plot figures** to prevent memory leaks: `plt.close(fig)`
+2. **Return self, not self.df** when `inplace=True` (v2.2.0+)
+3. **Log operation to history** after updating self.df (DataPreprocessor only, v2.2.0+)
+4. **Check for zero std/variance** before division
+5. **Validate numeric columns** before math operations
+6. **Use custom exceptions** for better error handling
+7. **Close plot figures** to prevent memory leaks: `plt.close(fig)`
 
 ---
 

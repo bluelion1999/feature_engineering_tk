@@ -44,7 +44,7 @@ class FeatureEngineer:
         self.encoders = {}
         self.scalers = {}
 
-    def encode_categorical_label(self, columns: List[str], inplace: bool = False) -> pd.DataFrame:
+    def encode_categorical_label(self, columns: List[str], inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Encode categorical columns using label encoding.
 
@@ -73,12 +73,12 @@ class FeatureEngineer:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def encode_categorical_onehot(self, columns: List[str], drop_first: bool = False,
                                    prefix: Optional[Dict[str, str]] = None,
-                                   inplace: bool = False) -> pd.DataFrame:
+                                   inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Encode categorical columns using one-hot encoding.
 
@@ -122,11 +122,11 @@ class FeatureEngineer:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def encode_categorical_ordinal(self, column: str, categories: List[Any],
-                                    inplace: bool = False) -> pd.DataFrame:
+                                    inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Encode categorical column with ordinal relationship.
 
@@ -161,11 +161,11 @@ class FeatureEngineer:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def scale_features(self, columns: List[str], method: str = 'standard',
-                       inplace: bool = False) -> pd.DataFrame:
+                       inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Scale numeric features using specified method.
 
@@ -219,12 +219,12 @@ class FeatureEngineer:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def create_polynomial_features(self, columns: List[str], degree: int = 2,
                                     interaction_only: bool = False,
-                                    inplace: bool = False) -> pd.DataFrame:
+                                    inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Create polynomial and interaction features.
 
@@ -285,13 +285,13 @@ class FeatureEngineer:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def create_binning(self, column: str, bins: Union[int, List[float]],
                        labels: Optional[List[str]] = None,
                        strategy: str = 'quantile',
-                       inplace: bool = False) -> pd.DataFrame:
+                       inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Bin continuous features into discrete intervals.
 
@@ -352,10 +352,10 @@ class FeatureEngineer:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
-    def create_log_transform(self, columns: List[str], inplace: bool = False) -> pd.DataFrame:
+    def create_log_transform(self, columns: List[str], inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Apply log transformation to features.
 
@@ -392,10 +392,10 @@ class FeatureEngineer:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
-    def create_sqrt_transform(self, columns: List[str], inplace: bool = False) -> pd.DataFrame:
+    def create_sqrt_transform(self, columns: List[str], inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Apply square root transformation to features.
 
@@ -431,11 +431,11 @@ class FeatureEngineer:
         # Fixed: Update self.df when inplace=True
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def create_datetime_features(self, column: str, features: Optional[List[str]] = None,
-                                  inplace: bool = False) -> pd.DataFrame:
+                                  inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Extract datetime features from a datetime column.
 
@@ -493,13 +493,13 @@ class FeatureEngineer:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def create_aggregations(self, group_by: Union[str, List[str]],
                             agg_column: str,
                             agg_funcs: List[str] = ['mean', 'sum', 'std', 'min', 'max'],
-                            inplace: bool = False) -> pd.DataFrame:
+                            inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Create aggregation features based on grouping.
 
@@ -541,13 +541,13 @@ class FeatureEngineer:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def create_ratio_features(self, numerator: str, denominator: str,
                                name: Optional[str] = None,
                                epsilon: float = 1e-8,
-                               inplace: bool = False) -> pd.DataFrame:
+                               inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Create ratio features from two numeric columns.
 
@@ -581,12 +581,12 @@ class FeatureEngineer:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def create_flag_features(self, column: str, condition: Any,
                              flag_name: Optional[str] = None,
-                             inplace: bool = False) -> pd.DataFrame:
+                             inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Create binary flag features based on conditions.
 
@@ -620,7 +620,7 @@ class FeatureEngineer:
 
         if inplace:
             self.df = df_result
-            return self.df
+            return self
         return df_result
 
     def save_transformers(self, filepath: Union[str, Path]) -> None:

@@ -88,7 +88,7 @@ class DataPreprocessor:
                                columns: Optional[List[str]] = None,
                                fill_value: Any = None,
                                method: Optional[str] = None,
-                               inplace: bool = False) -> pd.DataFrame:
+                               inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Handle missing values using various strategies.
 
@@ -198,7 +198,7 @@ class DataPreprocessor:
 
     def remove_duplicates(self, subset: Optional[List[str]] = None,
                           keep: str = 'first',
-                          inplace: bool = False) -> pd.DataFrame:
+                          inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Remove duplicate rows.
 
@@ -254,7 +254,7 @@ class DataPreprocessor:
                         multiplier: float = 1.5,
                         threshold: float = 3.0,
                         replace_with: str = 'median',
-                        inplace: bool = False) -> pd.DataFrame:
+                        inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Handle outliers using various methods.
 
@@ -361,7 +361,7 @@ class DataPreprocessor:
             return self
         return df_result.reset_index(drop=True)
 
-    def convert_dtypes(self, dtype_map: Dict[str, str], inplace: bool = False) -> pd.DataFrame:
+    def convert_dtypes(self, dtype_map: Dict[str, str], inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Convert column data types.
 
@@ -400,7 +400,7 @@ class DataPreprocessor:
 
     def clip_values(self, column: str, lower: Optional[float] = None,
                     upper: Optional[float] = None,
-                    inplace: bool = False) -> pd.DataFrame:
+                    inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Clip values in a column to specified range.
 
@@ -436,7 +436,7 @@ class DataPreprocessor:
             return self
         return df_result
 
-    def remove_constant_columns(self, inplace: bool = False) -> pd.DataFrame:
+    def remove_constant_columns(self, inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Remove columns with constant values.
 
@@ -460,7 +460,7 @@ class DataPreprocessor:
         return df_result
 
     def remove_high_cardinality_columns(self, threshold: float = 0.95,
-                                         inplace: bool = False) -> pd.DataFrame:
+                                         inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Remove columns with very high cardinality.
 
@@ -496,7 +496,7 @@ class DataPreprocessor:
         return df_result
 
     def filter_rows(self, condition: Union[pd.Series, callable],
-                    inplace: bool = False) -> pd.DataFrame:
+                    inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Filter rows based on a condition.
 
@@ -541,7 +541,7 @@ class DataPreprocessor:
             return self
         return df_result.reset_index(drop=True)
 
-    def drop_columns(self, columns: List[str], inplace: bool = False) -> pd.DataFrame:
+    def drop_columns(self, columns: List[str], inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Drop specified columns.
 
@@ -583,7 +583,7 @@ class DataPreprocessor:
             return self
         return df_result
 
-    def rename_columns(self, rename_map: Dict[str, str], inplace: bool = False) -> pd.DataFrame:
+    def rename_columns(self, rename_map: Dict[str, str], inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Rename columns.
 
@@ -606,7 +606,7 @@ class DataPreprocessor:
             return self
         return df_result
 
-    def reorder_columns(self, column_order: List[str], inplace: bool = False) -> pd.DataFrame:
+    def reorder_columns(self, column_order: List[str], inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Reorder columns.
 
@@ -639,7 +639,7 @@ class DataPreprocessor:
 
     def apply_custom_function(self, column: str, func: callable,
                                new_column: Optional[str] = None,
-                               inplace: bool = False) -> pd.DataFrame:
+                               inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Apply a custom function to a column.
 
@@ -677,7 +677,7 @@ class DataPreprocessor:
             return self
         return df_result
 
-    def reset_index_clean(self, inplace: bool = False) -> pd.DataFrame:
+    def reset_index_clean(self, inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Reset index and drop the old index.
 
@@ -698,7 +698,7 @@ class DataPreprocessor:
 
     def sample_data(self, n: Optional[int] = None, frac: Optional[float] = None,
                     random_state: Optional[int] = None,
-                    inplace: bool = False) -> pd.DataFrame:
+                    inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Sample data from the dataframe.
 
@@ -740,7 +740,7 @@ class DataPreprocessor:
 
     def clean_string_columns(self, columns: List[str],
                              operations: List[str] = ['strip', 'lower'],
-                             inplace: bool = False) -> pd.DataFrame:
+                             inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Clean string columns with common operations.
 
@@ -825,7 +825,7 @@ class DataPreprocessor:
         return df_result
 
     def handle_whitespace_variants(self, columns: List[str],
-                                    inplace: bool = False) -> pd.DataFrame:
+                                    inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Standardize whitespace variants in categorical columns.
 
@@ -871,7 +871,7 @@ class DataPreprocessor:
 
     def extract_string_length(self, columns: List[str],
                               suffix: str = '_length',
-                              inplace: bool = False) -> pd.DataFrame:
+                              inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Create length features from string columns.
 
@@ -1035,7 +1035,7 @@ class DataPreprocessor:
 
     def create_missing_indicators(self, columns: List[str],
                                    suffix: str = '_was_missing',
-                                   inplace: bool = False) -> pd.DataFrame:
+                                   inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Create binary indicator columns for missing values.
 

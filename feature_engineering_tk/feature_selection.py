@@ -325,26 +325,26 @@ def select_features_auto(df: pd.DataFrame,
     """Automatically select features using multiple methods."""
     selector = FeatureSelector(df, target_column)
 
-    print("Step 1: Removing low variance features...")
+    logger.info("Step 1: Removing low variance features...")
     variance_features = selector.select_by_variance(threshold=variance_threshold)
-    print(f"  - {len(variance_features)} features passed variance threshold")
+    logger.info(f"  - {len(variance_features)} features passed variance threshold")
 
-    print("\nStep 2: Removing highly correlated features...")
+    logger.info("Step 2: Removing highly correlated features...")
     df_variance = selector.apply_selection(variance_features, keep_target=True)
     selector_corr = FeatureSelector(df_variance, target_column)
     correlation_features = selector_corr.select_by_correlation(threshold=correlation_threshold)
-    print(f"  - {len(correlation_features)} features after correlation filtering")
+    logger.info(f"  - {len(correlation_features)} features after correlation filtering")
 
-    print("\nStep 3: Selecting top features by importance...")
+    logger.info("Step 3: Selecting top features by importance...")
     df_corr = selector_corr.apply_selection(correlation_features, keep_target=True)
     selector_final = FeatureSelector(df_corr, target_column)
     k = min(max_features, len(correlation_features))
     final_features = selector_final.select_by_importance(k=k, task=task)
-    print(f"  - {len(final_features)} final features selected")
+    logger.info(f"  - {len(final_features)} final features selected")
 
-    print("\nFinal selected features:")
+    logger.info("Final selected features:")
     for i, feat in enumerate(final_features, 1):
-        print(f"  {i}. {feat}")
+        logger.info(f"  {i}. {feat}")
 
     result_df = selector_final.apply_selection(final_features, keep_target=True)
     return result_df

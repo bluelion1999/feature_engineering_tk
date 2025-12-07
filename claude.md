@@ -15,6 +15,37 @@
 
 ## Recent Major Changes
 
+### Column Type Detection Enhancements (v2.2.0 - In Development, NOT YET RELEASED)
+**Branch**: feature/column-type-detection
+
+**User-Facing Features** (for README):
+1. **DataAnalyzer Enhancements** (2 new methods):
+   - `detect_misclassified_categorical()`: Identifies numeric columns that should be categorical
+     - Binary/flag columns (exactly 2 unique values)
+     - Low cardinality numeric columns (≤10 unique values by default)
+     - Columns with very low unique ratios (many repeated values)
+     - Integer columns with moderate cardinality (≤20 values)
+   - `suggest_binning()`: Recommends binning strategies based on distribution characteristics
+     - Quantile binning for skewed distributions (abs(skewness) > 1.0)
+     - Uniform binning for relatively uniform distributions
+     - Handles outlier-heavy columns with quantile strategy
+     - Suggests appropriate number of bins (min 20 unique values required)
+
+2. **Enhanced `quick_analysis()` Function**:
+   - New "MISCLASSIFIED CATEGORICAL COLUMNS" section
+   - New "BINNING SUGGESTIONS" section with actionable tips
+
+3. **Benefits**:
+   - Helps identify data type misclassifications during EDA
+   - Provides intelligent binning recommendations without requiring a target column
+   - Complements TargetAnalyzer's target-dependent suggestions (which require a target)
+
+**Testing** (CLAUDE.md only - DO NOT include in README):
+- Added 9 new tests (now 26 total tests in test_data_analysis.py)
+- 4 tests for categorical detection (binary, integer, low ratio, edge cases)
+- 5 tests for binning suggestions (skewed, uniform, outliers, thresholds, edge cases)
+- All tests passing ✅
+
 ### Architecture Refactoring (2025-11-24)
 1. **VIF Relocation**: Moved `calculate_vif()` from TargetAnalyzer to DataAnalyzer
    - VIF is target-independent multicollinearity detection
@@ -161,6 +192,8 @@ if not columns:
 - Correlation analysis (Pearson, Spearman)
 - **VIF calculation** for multicollinearity detection (VIF > 10 = high collinearity)
 - Cardinality analysis
+- **NEW (v2.2.0)**: Categorical column detection - identifies numeric columns that should be categorical
+- **NEW (v2.2.0)**: Binning suggestions - recommends binning strategies based on distribution
 - Plotting methods that return `Figure` objects
 
 **TargetAnalyzer - Phases 1-5, 7-8 Complete**:
@@ -362,10 +395,10 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 
 ## Testing
 
-**130+ tests** across 6 test files:
+**139 tests** across 6 test files:
 - `test_preprocessing.py`: 12 tests (inplace bugs, deprecated methods, div-by-zero)
 - `test_feature_engineering.py`: 13 tests (inplace bugs, transformer persistence)
-- `test_data_analysis.py`: 8 tests (div-by-zero protection, VIF calculation in DataAnalyzer)
+- `test_data_analysis.py`: 17 tests (div-by-zero protection, VIF calculation, **NEW v2.2.0**: categorical detection, binning suggestions)
 - `test_target_analyzer.py`: 87 tests (Phases 1-5,7-8: task detection, statistical tests, correlations, MI, VIF delegation, data quality, recommendations, report generation, feature engineering suggestions, model recommendations, integration tests)
 - `test_exceptions.py`: 4 tests (custom exception messages)
 - `test_plotting.py`: 8 tests (figure returns, save capability)
@@ -450,10 +483,19 @@ preprocessor.handle_missing_values(strategy='mean', inplace=True)
 - Clear, descriptive variable names
 
 ### README Guidelines
-- **Do NOT include testing information** (test counts, coverage details, pytest commands)
-- Testing documentation belongs in CLAUDE.md only, not in user-facing README
-- README should focus on features, usage, and API documentation for end-users
-- Keep README focused on what users can do with the library, not internal development practices
+- **CRITICAL: Do NOT include ANY testing information in README**
+  - NO test counts (e.g., "Added 9 tests", "173 total tests")
+  - NO test coverage percentages or details
+  - NO pytest commands or testing instructions
+  - NO mentions of "All tests passing" or test status
+- **Testing documentation belongs ONLY in CLAUDE.md**, never in user-facing README
+- **README is for end-users**, not developers:
+  - Focus on features, usage examples, and API documentation
+  - Show what users can do with the library
+  - Include installation, quick start, and usage examples
+  - Document public API methods and parameters
+- **Keep README focused on user value**, not internal development practices
+- When documenting new features, describe WHAT they do and HOW to use them, not how they're tested
 
 ---
 

@@ -15,8 +15,11 @@
 
 ## Recent Major Changes
 
-### DataPreprocessor Enhancements (v2.2.0 - 2025-11-30)
-**Branch**: feature/preprocessor-enhancements
+### Version 2.2.0 Release (2025-12-07)
+**Status**: Ready for release
+**Branches**: feature/preprocessor-enhancements (includes column-type-detection)
+
+#### DataPreprocessor Enhancements
 
 1. **String Preprocessing Methods** (3 new methods):
    - `clean_string_columns()`: 7 operations (strip, lower, upper, title, remove_punctuation, remove_digits, remove_extra_spaces)
@@ -50,11 +53,9 @@
 - 6 tests for method chaining
 - 17 tests for operation history tracking
 
-### Column Type Detection Enhancements (v2.2.0 - In Development, NOT YET RELEASED)
-**Branch**: feature/column-type-detection
+#### DataAnalyzer Enhancements (Column Type Detection)
 
-**User-Facing Features** (for README):
-1. **DataAnalyzer Enhancements** (2 new methods):
+1. **New Methods** (2 total):
    - `detect_misclassified_categorical()`: Identifies numeric columns that should be categorical
      - Binary/flag columns (exactly 2 unique values)
      - Low cardinality numeric columns (≤10 unique values by default)

@@ -5,9 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.2.0] - 2025-11-30
+## [2.2.0] - 2025-12-07
 
 ### Added
+
+- **DataAnalyzer Enhancements** - Column type detection and binning suggestions
+
+  - **Column Type Detection**
+    - `detect_misclassified_categorical()`: Identifies numeric columns that should be categorical
+    - Detects binary/flag columns (exactly 2 unique values)
+    - Finds low cardinality numeric columns (≤10 unique values by default)
+    - Identifies columns with very low unique ratios (many repeated values)
+    - Catches integer columns with moderate cardinality (≤20 values)
+
+  - **Binning Suggestions**
+    - `suggest_binning()`: Recommends binning strategies based on distribution characteristics
+    - Quantile binning for skewed distributions (abs(skewness) > 1.0)
+    - Uniform binning for relatively uniform distributions
+    - Handles outlier-heavy columns appropriately
+    - Suggests appropriate number of bins (requires min 20 unique values)
+
+  - **Enhanced `quick_analysis()` Function**
+    - New "MISCLASSIFIED CATEGORICAL COLUMNS" section
+    - New "BINNING SUGGESTIONS" section with actionable tips
+    - Helps identify data type misclassifications during EDA
+    - Provides intelligent binning recommendations without requiring a target column
 
 - **DataPreprocessor Enhancements** - Major quality-of-life improvements
 
@@ -59,14 +81,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
-- Added 42 comprehensive tests for new features (now 173 total tests)
-  - 7 tests for string preprocessing
-  - 6 tests for data validation
-  - 6 tests for enhanced error handling
-  - 6 tests for method chaining
-  - 17 tests for operation history tracking
+- Added 51 comprehensive tests for new features (now 182 total tests)
+  - **DataAnalyzer**: 9 tests for column type detection and binning suggestions
+  - **DataPreprocessor**: 42 tests
+    - 7 tests for string preprocessing
+    - 6 tests for data validation
+    - 6 tests for enhanced error handling
+    - 6 tests for method chaining
+    - 17 tests for operation history tracking
 
-All 173 tests pass successfully.
+All 182 tests pass successfully.
 
 ## [2.1.1] - 2025-11-30
 

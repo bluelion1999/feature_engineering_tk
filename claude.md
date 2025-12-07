@@ -461,6 +461,7 @@ preprocessor.handle_missing_values(strategy='mean', inplace=True)
 
 - **Remote**: origin → https://github.com/bluelion1999/feature_engineering_tk
 - **Default Branch**: master (not main)
+- **Branch Naming**: `master` and `main` are interchangeable terms when referring to the default branch
 - **Initial Commit**: c146f94
 
 ---

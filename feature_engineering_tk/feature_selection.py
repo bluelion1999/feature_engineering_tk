@@ -55,17 +55,38 @@ class FeatureSelector:
         self.selected_features: List[str] = []
         self.feature_scores: Dict[str, Dict[str, float]] = {}
 
-    def select_by_variance(self, threshold: float = 0.0,
-                           exclude_columns: Optional[List[str]] = None) -> List[str]:
-        """Select features based on variance threshold."""
+    def _get_feature_columns(self, exclude_columns: Optional[List[str]] = None,
+                             numeric_only: bool = True) -> List[str]:
+        """
+        Helper to get filtered feature columns.
+
+        Args:
+            exclude_columns: Columns to exclude from selection
+            numeric_only: If True, return only numeric columns. Default True.
+
+        Returns:
+            List of filtered column names
+        """
         if exclude_columns is None:
             exclude_columns = []
 
-        if self.target_column:
-            exclude_columns.append(self.target_column)
+        # Add target column to exclusion list if present
+        if self.target_column and self.target_column not in exclude_columns:
+            exclude_columns = exclude_columns + [self.target_column]
 
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
-        feature_cols = [col for col in numeric_cols if col not in exclude_columns]
+        # Select columns based on type
+        if numeric_only:
+            cols = self.df.select_dtypes(include=[np.number]).columns
+        else:
+            cols = self.df.columns
+
+        # Filter out excluded columns
+        return [col for col in cols if col not in exclude_columns]
+
+    def select_by_variance(self, threshold: float = 0.0,
+                           exclude_columns: Optional[List[str]] = None) -> List[str]:
+        """Select features based on variance threshold."""
+        feature_cols = self._get_feature_columns(exclude_columns, numeric_only=True)
 
         if not feature_cols:
             logger.warning("No numeric features available for variance-based selection")
@@ -86,14 +107,7 @@ class FeatureSelector:
                                method: str = 'pearson',
                                exclude_columns: Optional[List[str]] = None) -> List[str]:
         """Remove highly correlated features, keeping one from each pair."""
-        if exclude_columns is None:
-            exclude_columns = []
-
-        if self.target_column:
-            exclude_columns.append(self.target_column)
-
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
-        feature_cols = [col for col in numeric_cols if col not in exclude_columns]
+        feature_cols = self._get_feature_columns(exclude_columns, numeric_only=True)
 
         if len(feature_cols) < 2:
             logger.warning("Not enough features for correlation-based selection")
@@ -122,13 +136,7 @@ class FeatureSelector:
         if self.target_column not in self.df.columns:
             raise ValueError(f"Target column '{self.target_column}' not found in dataframe")
 
-        if exclude_columns is None:
-            exclude_columns = []
-
-        exclude_columns.append(self.target_column)
-
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
-        feature_cols = [col for col in numeric_cols if col not in exclude_columns]
+        feature_cols = self._get_feature_columns(exclude_columns, numeric_only=True)
 
         if not feature_cols:
             logger.warning("No numeric features available for correlation-based selection")
@@ -155,13 +163,7 @@ class FeatureSelector:
         if self.target_column not in self.df.columns:
             raise ValueError(f"Target column '{self.target_column}' not found in dataframe")
 
-        if exclude_columns is None:
-            exclude_columns = []
-
-        exclude_columns.append(self.target_column)
-
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
-        feature_cols = [col for col in numeric_cols if col not in exclude_columns]
+        feature_cols = self._get_feature_columns(exclude_columns, numeric_only=True)
 
         if not feature_cols:
             logger.warning("No numeric features available for statistical test selection")
@@ -215,13 +217,7 @@ class FeatureSelector:
         if self.target_column not in self.df.columns:
             raise ValueError(f"Target column '{self.target_column}' not found in dataframe")
 
-        if exclude_columns is None:
-            exclude_columns = []
-
-        exclude_columns.append(self.target_column)
-
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns.tolist()
-        feature_cols = [col for col in numeric_cols if col not in exclude_columns]
+        feature_cols = self._get_feature_columns(exclude_columns, numeric_only=True)
 
         if not feature_cols:
             logger.warning("No numeric features available for importance-based selection")
@@ -277,12 +273,12 @@ class FeatureSelector:
             logger.warning("No feature scores available. Run a selection method first")
             return pd.DataFrame()
 
-        latest_score_type = list(self.feature_scores.keys())[-1]
+        latest_score_type = next(reversed(self.feature_scores))
         scores = self.feature_scores[latest_score_type]
 
         df_scores = pd.DataFrame({
-            'feature': list(scores.keys()),
-            'score': list(scores.values()),
+            'feature': scores.keys(),
+            'score': scores.values(),
             'score_type': latest_score_type
         })
 

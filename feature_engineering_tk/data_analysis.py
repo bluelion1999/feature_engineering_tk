@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import seaborn as sns
 import logging
 from typing import List, Optional, Dict, Any, Union, Tuple
@@ -411,7 +412,7 @@ class DataAnalyzer:
 
         return df_suggestions.reset_index(drop=True)
 
-    def plot_missing_values(self, figsize: tuple = (12, 6), show: bool = True):
+    def plot_missing_values(self, figsize: tuple = (12, 6), show: bool = True) -> Optional[Figure]:
         """
         Visualize missing values.
 
@@ -442,7 +443,7 @@ class DataAnalyzer:
         return fig
 
     def plot_correlation_heatmap(self, figsize: tuple = (10, 8), method: str = 'pearson',
-                                  annot: bool = True, show: bool = True):
+                                  annot: bool = True, show: bool = True) -> Optional[Figure]:
         """
         Plot correlation heatmap.
 
@@ -473,7 +474,7 @@ class DataAnalyzer:
         return fig
 
     def plot_distributions(self, columns: Optional[List[str]] = None, figsize: tuple = (15, 10),
-                          show: bool = True):
+                          show: bool = True) -> Optional[Figure]:
         """
         Plot distributions for numeric columns.
 
@@ -527,6 +528,9 @@ class TargetAnalyzer:
     Automatically detects task type (classification vs regression) based on target
     column characteristics, or accepts explicit task specification.
     """
+
+    # Class constants for thresholds
+    NONLINEAR_IMPROVEMENT_THRESHOLD = 1.2  # Polynomial must be 20% better than linear
 
     def __init__(self, df: pd.DataFrame, target_column: str, task: str = 'auto'):
         """
@@ -737,7 +741,7 @@ class TargetAnalyzer:
         self._analysis_cache['target_distribution'] = distribution
         return distribution
 
-    def plot_class_distribution(self, figsize: tuple = (10, 6), show: bool = True):
+    def plot_class_distribution(self, figsize: tuple = (10, 6), show: bool = True) -> Optional[Figure]:
         """
         Plot class distribution for classification tasks.
 
@@ -780,7 +784,7 @@ class TargetAnalyzer:
 
         return fig
 
-    def plot_target_distribution(self, figsize: tuple = (12, 5), show: bool = True):
+    def plot_target_distribution(self, figsize: tuple = (12, 5), show: bool = True) -> Optional[Figure]:
         """
         Plot target distribution for regression tasks.
 
@@ -1043,7 +1047,7 @@ class TargetAnalyzer:
         return results
 
     def plot_feature_by_class(self, feature: str, plot_type: str = 'box',
-                             figsize: tuple = (10, 6), show: bool = True):
+                             figsize: tuple = (10, 6), show: bool = True) -> Optional[Figure]:
         """
         Plot feature distribution by class (classification only).
 
@@ -1209,7 +1213,7 @@ class TargetAnalyzer:
             return pd.DataFrame()
 
     def plot_feature_vs_target(self, features: Optional[List[str]] = None,
-                               max_features: int = 6, figsize: tuple = (15, 10), show: bool = True):
+                               max_features: int = 6, figsize: tuple = (15, 10), show: bool = True) -> Optional[Figure]:
         """
         Create scatter plots of features vs target (regression only).
 
@@ -1332,7 +1336,7 @@ class TargetAnalyzer:
 
         return results
 
-    def plot_residuals(self, predictions: pd.Series, figsize: tuple = (12, 5), show: bool = True):
+    def plot_residuals(self, predictions: pd.Series, figsize: tuple = (12, 5), show: bool = True) -> Optional[Figure]:
         """
         Plot residual analysis (regression only).
 
@@ -1896,7 +1900,7 @@ class TargetAnalyzer:
                 col_squared = col_data ** 2
                 poly_corr = abs(np.corrcoef(col_squared, target_clean)[0, 1])
 
-                if poly_corr > linear_corr * 1.2:  # 20% improvement
+                if poly_corr > linear_corr * self.NONLINEAR_IMPROVEMENT_THRESHOLD:  # 20% improvement
                     suggestions.append({
                         'feature': feature,
                         'suggestion': 'Create polynomial features (squared, cubed)',

@@ -38,6 +38,10 @@ class DataPreprocessor:
         - Enhanced error handling and logging across all methods
     """
 
+    # Class constants for thresholds
+    DESTRUCTIVE_OPERATION_THRESHOLD = 0.3  # Warn if >30% of data will be removed
+    HIGH_CARDINALITY_THRESHOLD = 0.95      # Threshold for high cardinality detection
+
     def __init__(self, df: pd.DataFrame):
         """
         Initialize DataPreprocessor with a dataframe.
@@ -101,10 +105,26 @@ class DataPreprocessor:
             inplace: If True, modifies internal dataframe. Default False.
 
         Returns:
-            Modified DataFrame
+            Modified DataFrame if inplace=False, else self for chaining
 
         Raises:
             ValueError: If invalid strategy or missing required parameters
+
+        Examples:
+            >>> preprocessor = DataPreprocessor(df)
+            >>> # Fill numeric columns with mean
+            >>> df_clean = preprocessor.handle_missing_values(strategy='mean')
+            >>>
+            >>> # Method chaining with inplace=True
+            >>> preprocessor.handle_missing_values(strategy='mean', inplace=True)\
+            ...            .remove_duplicates(inplace=True)
+            >>>
+            >>> # Fill specific columns with a value
+            >>> df_clean = preprocessor.handle_missing_values(
+            ...     strategy='fill_value',
+            ...     columns=['age', 'income'],
+            ...     fill_value=0
+            ... )
         """
         valid_strategies = ['drop', 'fill_value', 'mean', 'median', 'mode',
                            'forward_fill', 'backward_fill', 'interpolate']
@@ -133,7 +153,7 @@ class DataPreprocessor:
             rows_before = len(df_result)
             df_result = df_result.dropna(subset=columns)
             rows_removed = rows_before - len(df_result)
-            if rows_removed > rows_before * 0.3:
+            if rows_removed > rows_before * self.DESTRUCTIVE_OPERATION_THRESHOLD:
                 logger.warning(
                     f"Dropping missing values removed {rows_removed} rows "
                     f"({rows_removed/rows_before*100:.1f}% of data). "
@@ -325,7 +345,7 @@ class DataPreprocessor:
 
             if action == 'remove':
                 # Warn if removing too many rows
-                if outlier_count > len(df_result) * 0.3:
+                if outlier_count > len(df_result) * self.DESTRUCTIVE_OPERATION_THRESHOLD:
                     logger.warning(f"Removing outliers from '{col}' would remove {outlier_pct:.1f}% of data. "
                                  f"Consider using action='cap' or 'replace' instead.")
                 df_result = df_result[~outlier_mask]
@@ -970,7 +990,7 @@ class DataPreprocessor:
         # High cardinality columns
         for col in self.df.columns:
             unique_ratio = self.df[col].nunique() / len(self.df)
-            if unique_ratio > 0.95 and len(self.df) > 10:
+            if unique_ratio > self.HIGH_CARDINALITY_THRESHOLD and len(self.df) > 10:
                 validation['high_cardinality_columns'].append(col)
         if validation['high_cardinality_columns']:
             validation['issues_found'].append(

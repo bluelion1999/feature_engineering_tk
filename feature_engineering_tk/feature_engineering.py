@@ -29,6 +29,9 @@ class FeatureEngineer:
     Fitted encoders and scalers are stored and can be exported for production use.
     """
 
+    # Class constants for thresholds
+    HIGH_CARDINALITY_WARNING_THRESHOLD = 100  # Warn if cardinality exceeds this value
+
     def __init__(self, df: pd.DataFrame):
         """
         Initialize FeatureEngineer with a dataframe.
@@ -105,7 +108,7 @@ class FeatureEngineer:
                 continue
 
             unique_count = df_result[col].nunique()
-            if unique_count > 100:
+            if unique_count > self.HIGH_CARDINALITY_WARNING_THRESHOLD:
                 logger.warning(f"Column '{col}' has {unique_count} unique values. "
                              "Consider using other encoding methods for high cardinality.")
 
@@ -175,10 +178,21 @@ class FeatureEngineer:
             inplace: If True, modifies internal dataframe. Default False.
 
         Returns:
-            DataFrame with scaled features
+            DataFrame with scaled features if inplace=False, else self for chaining
 
         Raises:
             ValueError: If invalid method specified
+
+        Examples:
+            >>> engineer = FeatureEngineer(df)
+            >>> # Standard scaling (zero mean, unit variance)
+            >>> df_scaled = engineer.scale_features(['age', 'income'], method='standard')
+            >>>
+            >>> # MinMax scaling (0-1 range)
+            >>> df_scaled = engineer.scale_features(['price'], method='minmax')
+            >>>
+            >>> # Robust scaling (handles outliers better)
+            >>> engineer.scale_features(['salary'], method='robust', inplace=True)
         """
         if not isinstance(columns, list):
             raise TypeError("columns must be a list")

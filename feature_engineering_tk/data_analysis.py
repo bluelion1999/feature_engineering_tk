@@ -243,6 +243,174 @@ class DataAnalyzer:
             logger.warning(f"Could not calculate VIF: {e}")
             return pd.DataFrame()
 
+    def detect_misclassified_categorical(self, max_unique: int = 10,
+                                         min_unique_ratio: float = 0.05) -> pd.DataFrame:
+        """
+        Detect numeric columns that should likely be categorical.
+
+        Identifies numeric columns that may be flags, binary indicators, or low-cardinality
+        categorical variables incorrectly stored as numeric types.
+
+        Args:
+            max_unique: Maximum unique values for a column to be considered categorical.
+                       Default 10.
+            min_unique_ratio: Minimum ratio of unique values to total rows. Columns with
+                            lower ratios are candidates for categorical encoding. Default 0.05.
+
+        Returns:
+            DataFrame with columns: column, unique_count, unique_ratio, dtype, suggestion
+            Sorted by unique_count ascending (most likely categorical first)
+        """
+        numeric_cols = self.df.select_dtypes(include=[np.number]).columns
+
+        if len(numeric_cols) == 0:
+            return pd.DataFrame()
+
+        candidates = []
+        for col in numeric_cols:
+            col_data = self.df[col].dropna()
+            if len(col_data) == 0:
+                continue
+
+            unique_count = col_data.nunique()
+            unique_ratio = unique_count / len(col_data)
+
+            # Check if column should be categorical
+            is_candidate = False
+            suggestion = ""
+
+            # Binary/flag columns (exactly 2 unique values)
+            if unique_count == 2:
+                is_candidate = True
+                values = sorted(col_data.unique())
+                suggestion = f"Binary flag ({values[0]}, {values[1]}) - consider converting to categorical or boolean"
+
+            # Low cardinality numeric columns
+            elif unique_count <= max_unique:
+                is_candidate = True
+                suggestion = f"Low cardinality ({unique_count} categories) - likely ordinal or nominal"
+
+            # Very low unique ratio (many repeated values)
+            elif unique_ratio < min_unique_ratio:
+                is_candidate = True
+                suggestion = f"Very low unique ratio ({unique_ratio:.1%}) - possibly categorical with {unique_count} categories"
+
+            # Integer-only columns with low cardinality
+            elif col_data.dtype in ['int64', 'int32', 'int16', 'int8'] and unique_count <= 20:
+                # Check if all values are integers (some int columns can have floats after operations)
+                if (col_data == col_data.astype(int)).all():
+                    is_candidate = True
+                    suggestion = f"Integer column with {unique_count} values - likely categorical/ordinal"
+
+            if is_candidate:
+                candidates.append({
+                    'column': col,
+                    'unique_count': unique_count,
+                    'unique_ratio': unique_ratio,
+                    'dtype': str(self.df[col].dtype),
+                    'suggestion': suggestion
+                })
+
+        df_candidates = pd.DataFrame(candidates)
+        if not df_candidates.empty:
+            df_candidates = df_candidates.sort_values('unique_count')
+
+        return df_candidates.reset_index(drop=True)
+
+    def suggest_binning(self, max_bins: int = 10, min_unique: int = 20) -> pd.DataFrame:
+        """
+        Suggest binning strategies for numeric columns.
+
+        Analyzes numeric columns to recommend binning approaches based on:
+        - Distribution characteristics (skewness, outliers)
+        - Number of unique values
+        - Value ranges
+
+        Args:
+            max_bins: Maximum number of bins to suggest. Default 10.
+            min_unique: Minimum unique values required to suggest binning. Default 20.
+
+        Returns:
+            DataFrame with columns: column, strategy, num_bins, reason
+            Sorted by priority (columns that would benefit most from binning first)
+        """
+        numeric_cols = self.df.select_dtypes(include=[np.number]).columns
+
+        if len(numeric_cols) == 0:
+            return pd.DataFrame()
+
+        suggestions = []
+        for col in numeric_cols:
+            col_data = self.df[col].dropna()
+            if len(col_data) < 10:
+                continue
+
+            unique_count = col_data.nunique()
+
+            # Skip columns with very few unique values (already categorical-like)
+            if unique_count < min_unique:
+                continue
+
+            # Calculate statistics
+            skewness = col_data.skew()
+            q1 = col_data.quantile(0.25)
+            q3 = col_data.quantile(0.75)
+            iqr = q3 - q1
+
+            # Detect outliers
+            outlier_mask = (col_data < (q1 - 1.5 * iqr)) | (col_data > (q3 + 1.5 * iqr))
+            outlier_pct = (outlier_mask.sum() / len(col_data)) * 100
+
+            # Determine binning strategy and number of bins
+            strategy = ""
+            num_bins = 0
+            reason = ""
+            priority = 0
+
+            # Strategy 1: Quantile binning for skewed distributions
+            if abs(skewness) > 1.0:
+                strategy = "quantile"
+                num_bins = min(max_bins, max(5, unique_count // 20))
+                reason = f"Skewed distribution (skewness={skewness:.2f})"
+                priority = 3 if abs(skewness) > 2 else 2
+
+            # Strategy 2: Equal-width for uniform distributions
+            elif abs(skewness) < 0.5 and outlier_pct < 5:
+                strategy = "uniform"
+                num_bins = min(max_bins, max(5, unique_count // 20))
+                reason = f"Relatively uniform distribution (skewness={skewness:.2f})"
+                priority = 1
+
+            # Strategy 3: Custom bins for outlier-heavy columns
+            elif outlier_pct > 5:
+                strategy = "quantile"
+                num_bins = min(max_bins, max(4, unique_count // 30))
+                reason = f"{outlier_pct:.1f}% outliers - quantile binning handles outliers better"
+                priority = 3
+
+            # Strategy 4: Default to uniform for normal-ish distributions
+            else:
+                strategy = "uniform"
+                num_bins = min(max_bins, max(5, unique_count // 20))
+                reason = "General purpose binning recommended"
+                priority = 1
+
+            suggestions.append({
+                'column': col,
+                'strategy': strategy,
+                'num_bins': num_bins,
+                'reason': reason,
+                '_priority': priority
+            })
+
+        df_suggestions = pd.DataFrame(suggestions)
+        if not df_suggestions.empty:
+            # Sort by priority (descending) then by column name
+            df_suggestions = df_suggestions.sort_values(['_priority', 'column'], ascending=[False, True])
+            df_suggestions = df_suggestions.drop(columns=['_priority'])
+
+        return df_suggestions.reset_index(drop=True)
+
     def plot_missing_values(self, figsize: tuple = (12, 6), show: bool = True):
         """
         Visualize missing values.
@@ -2058,3 +2226,27 @@ def quick_analysis(df: pd.DataFrame) -> None:
         print(high_corr.to_string(index=False))
     else:
         print("No high correlations found.")
+    print()
+
+    print("=" * 80)
+    print("MISCLASSIFIED CATEGORICAL COLUMNS")
+    print("=" * 80)
+    misclassified = analyzer.detect_misclassified_categorical()
+    if not misclassified.empty:
+        print(misclassified.to_string(index=False))
+        print()
+        print("💡 Tip: These numeric columns may benefit from categorical encoding.")
+    else:
+        print("No numeric columns appear to be misclassified categorical variables.")
+    print()
+
+    print("=" * 80)
+    print("BINNING SUGGESTIONS")
+    print("=" * 80)
+    binning = analyzer.suggest_binning()
+    if not binning.empty:
+        print(binning.to_string(index=False))
+        print()
+        print("💡 Tip: Use FeatureEngineer.create_binning(column, bins, strategy) to apply.")
+    else:
+        print("No binning suggestions (columns may have too few unique values).")

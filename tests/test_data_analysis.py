@@ -114,6 +114,143 @@ class TestDataAnalyzer:
         # Should return empty DataFrame
         assert vif_df.empty
 
+    def test_detect_misclassified_categorical_binary(self):
+        """Test detection of binary/flag columns."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'binary_flag': [0, 1, 0, 1, 0, 1] * 5,
+            'low_cardinality': [1, 2, 3, 1, 2, 3] * 5,
+            'normal_numeric': np.random.randn(30) * 100  # Many unique values
+        })
+        analyzer = DataAnalyzer(df)
+        misclassified = analyzer.detect_misclassified_categorical()
+
+        # Should detect binary_flag and low_cardinality
+        assert not misclassified.empty
+        assert 'binary_flag' in misclassified['column'].values
+        assert 'low_cardinality' in misclassified['column'].values
+        assert 'normal_numeric' not in misclassified['column'].values
+
+        # Check binary flag has 2 unique values
+        binary_row = misclassified[misclassified['column'] == 'binary_flag'].iloc[0]
+        assert binary_row['unique_count'] == 2
+        assert 'Binary flag' in binary_row['suggestion']
+
+    def test_detect_misclassified_categorical_integer_column(self):
+        """Test detection of integer columns with low cardinality."""
+        df = pd.DataFrame({
+            'rating': [1, 2, 3, 4, 5] * 10,  # 5 unique integers
+            'continuous': np.linspace(0, 100, 50)  # 50 unique values
+        })
+        analyzer = DataAnalyzer(df)
+        misclassified = analyzer.detect_misclassified_categorical()
+
+        # Should detect rating as likely categorical
+        assert 'rating' in misclassified['column'].values
+        assert 'continuous' not in misclassified['column'].values
+
+    def test_detect_misclassified_categorical_low_unique_ratio(self):
+        """Test detection based on low unique ratio."""
+        # Create column with many repeated values
+        df = pd.DataFrame({
+            'repeated': [1, 1, 1, 1, 1, 2, 2, 2, 2, 3] * 20  # Only 3 unique in 200 rows
+        })
+        analyzer = DataAnalyzer(df)
+        misclassified = analyzer.detect_misclassified_categorical(min_unique_ratio=0.05)
+
+        # Should detect due to low unique ratio (3/200 = 1.5%)
+        assert 'repeated' in misclassified['column'].values
+
+    def test_detect_misclassified_categorical_no_numeric_columns(self):
+        """Test with no numeric columns."""
+        df = pd.DataFrame({
+            'cat1': ['A', 'B', 'C'],
+            'cat2': ['X', 'Y', 'Z']
+        })
+        analyzer = DataAnalyzer(df)
+        misclassified = analyzer.detect_misclassified_categorical()
+
+        # Should return empty DataFrame
+        assert misclassified.empty
+
+    def test_suggest_binning_skewed_distribution(self):
+        """Test binning suggestion for skewed distribution."""
+        np.random.seed(42)
+        # Create right-skewed data
+        df = pd.DataFrame({
+            'skewed': np.random.exponential(scale=2.0, size=100)
+        })
+        analyzer = DataAnalyzer(df)
+        binning = analyzer.suggest_binning()
+
+        # Should suggest quantile binning for skewed data
+        assert not binning.empty
+        assert 'skewed' in binning['column'].values
+        skewed_row = binning[binning['column'] == 'skewed'].iloc[0]
+        assert skewed_row['strategy'] == 'quantile'
+        assert 'skewed' in skewed_row['reason'].lower()
+
+    def test_suggest_binning_uniform_distribution(self):
+        """Test binning suggestion for uniform distribution."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'uniform': np.random.uniform(0, 100, size=100)
+        })
+        analyzer = DataAnalyzer(df)
+        binning = analyzer.suggest_binning()
+
+        # Should suggest uniform binning for uniform data
+        assert not binning.empty
+        assert 'uniform' in binning['column'].values
+        uniform_row = binning[binning['column'] == 'uniform'].iloc[0]
+        assert uniform_row['strategy'] == 'uniform'
+
+    def test_suggest_binning_with_outliers(self):
+        """Test binning suggestion for data with outliers."""
+        np.random.seed(42)
+        # Create data with enough unique values (>20) and outliers
+        normal_data = np.random.normal(50, 10, 100).tolist()
+        outliers = [200, 250]
+        df = pd.DataFrame({
+            'with_outliers': normal_data + outliers
+        })
+        analyzer = DataAnalyzer(df)
+        binning = analyzer.suggest_binning()
+
+        # Should suggest quantile binning (outliers create skewness, both handled by quantile)
+        assert not binning.empty
+        assert 'with_outliers' in binning['column'].values
+        outlier_row = binning[binning['column'] == 'with_outliers'].iloc[0]
+        assert outlier_row['strategy'] == 'quantile'
+        # Outliers create skewness, so either reason is correct
+        assert ('outlier' in outlier_row['reason'].lower() or
+                'skew' in outlier_row['reason'].lower())
+
+    def test_suggest_binning_min_unique_threshold(self):
+        """Test that columns with few unique values are not suggested."""
+        df = pd.DataFrame({
+            'few_unique': [1, 2, 3, 4, 5] * 20,  # Only 5 unique values, 100 rows
+            'many_unique': list(range(100))  # 100 unique values, 100 rows
+        })
+        analyzer = DataAnalyzer(df)
+        binning = analyzer.suggest_binning(min_unique=20)
+
+        # Should only suggest binning for many_unique
+        assert 'many_unique' in binning['column'].values
+        assert 'few_unique' not in binning['column'].values
+
+    def test_suggest_binning_no_numeric_columns(self):
+        """Test binning suggestion with no numeric columns."""
+        df = pd.DataFrame({
+            'cat1': ['A', 'B', 'C'] * 10,
+            'cat2': ['X', 'Y', 'Z'] * 10
+        })
+        analyzer = DataAnalyzer(df)
+        binning = analyzer.suggest_binning()
+
+        # Should return empty DataFrame
+        assert binning.empty
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

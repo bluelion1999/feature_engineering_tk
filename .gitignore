@@ -135,3 +135,10 @@ Thumbs.db
 
 # Project specific
 examples/
+
+# Claude Code - Personal Settings Only
+# Team-shared agents, skills, and settings.json are committed
+.claude/settings.local.json
+.claude/.session
+.claude/cache/
+.claude/temp/

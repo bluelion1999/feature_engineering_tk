@@ -1,0 +1,26 @@
+{
+  "model": "sonnet",
+  "description": "MLToolkit project settings - feature engineering and data analysis library",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Grep",
+      "Glob"
+    ],
+    "deny": [
+      "Bash(rm:-rf:*)",
+      "Bash(git:push:--force)",
+      "Read(.env)",
+      "Read(**/secrets/**)",
+      "Write(.env)"
+    ]
+  },
+  "subagents": true,
+  "environment": {
+    "PYTHONPATH": ".",
+    "PYTEST_ARGS": "-v --tb=short"
+  }
+}

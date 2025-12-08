@@ -9,6 +9,7 @@ A comprehensive Python toolkit for feature engineering and advanced data analysi
 ## Features
 
 - **Smart Data Analysis**: Automatic EDA with comprehensive statistics and visualizations
+- **Column Type Detection**: Identify misclassified categorical columns and binning opportunities (NEW v2.2.0)
 - **Target-Aware Analysis**: Advanced statistical analysis that auto-detects classification vs regression tasks
 - **Intelligent Recommendations**: Automated feature engineering suggestions based on data characteristics
 - **Model Recommendations**: ML algorithm suggestions tailored to your dataset
@@ -30,6 +31,67 @@ pip install feature-engineering-tk
 **Requirements:** Python 3.8+
 
 ## What's New in v2.2.0
+
+**DataAnalyzer Enhancements - Column Type Detection & Binning Suggestions:**
+
+### 🔍 Column Type Detection
+Identify numeric columns that should actually be categorical:
+
+```python
+from feature_engineering_tk import DataAnalyzer
+
+analyzer = DataAnalyzer(df)
+
+# Detect misclassified categorical columns
+misclassified = analyzer.detect_misclassified_categorical(max_unique=10)
+print(misclassified)
+# Returns DataFrame with columns:
+#   - column: column name
+#   - unique_count: number of unique values
+#   - unique_ratio: ratio of unique values to total rows
+#   - dtype: current data type
+#   - suggestion: why it should be categorical
+
+# Automatically detects:
+# - Binary/flag columns (exactly 2 unique values)
+# - Low cardinality numeric columns (≤10 unique values by default)
+# - Columns with very low unique ratios (many repeated values)
+# - Integer columns with moderate cardinality (≤20 values)
+```
+
+### 📊 Binning Suggestions
+Get intelligent binning recommendations based on distribution characteristics:
+
+```python
+# Get binning suggestions
+binning_suggestions = analyzer.suggest_binning(min_unique=20)
+print(binning_suggestions)
+# Returns DataFrame with columns:
+#   - column: column name
+#   - current_unique: number of unique values
+#   - suggested_bins: recommended number of bins
+#   - binning_strategy: 'quantile' or 'uniform'
+#   - reason: explanation for the suggestion
+
+# Strategies:
+# - Quantile binning for skewed distributions (abs(skewness) > 1.0)
+# - Uniform binning for relatively uniform distributions
+# - Handles outlier-heavy columns appropriately
+```
+
+### 📈 Enhanced quick_analysis()
+The `quick_analysis()` function now includes two new sections:
+- **MISCLASSIFIED CATEGORICAL COLUMNS**: Identifies data type issues
+- **BINNING SUGGESTIONS**: Recommends binning strategies for continuous features
+
+```python
+from feature_engineering_tk import quick_analysis
+
+quick_analysis(df)
+# Now shows additional insights for better EDA
+```
+
+---
 
 **DataPreprocessor Enhancements - Major Quality-of-Life Improvements:**
 
@@ -118,7 +180,9 @@ preprocessor.create_missing_indicators(['age', 'income'], inplace=True)
 - Warnings for potentially destructive operations (e.g., removing >30% of data)
 - Improved logging throughout
 
-**Test Coverage:** Added 42 comprehensive tests (now 173 total tests across the library)
+**Test Coverage:** Added 51 comprehensive tests for v2.2.0 (now 182 total tests across the library)
+- **DataAnalyzer**: 9 tests for column type detection and binning suggestions
+- **DataPreprocessor**: 42 tests for string preprocessing, data validation, error handling, method chaining, and operation history
 
 ## What's New in v2.1.1
 
@@ -613,6 +677,8 @@ General-purpose exploratory data analysis (no target column required).
 - `get_high_correlations()`: Find highly correlated feature pairs
 - `calculate_vif()`: Calculate Variance Inflation Factor for multicollinearity detection
 - `get_cardinality_info()`: Get cardinality information for categorical features
+- `detect_misclassified_categorical()`: Identify numeric columns that should be categorical (NEW v2.2.0)
+- `suggest_binning()`: Get intelligent binning recommendations based on distributions (NEW v2.2.0)
 
 **Visualization Methods:**
 - `plot_missing_values()`: Visualize missing values heatmap
@@ -657,6 +723,7 @@ Advanced target-aware analysis for ML tasks (requires target column).
 
 ### DataPreprocessor
 
+**Data Cleaning:**
 - `handle_missing_values()`: Handle missing values with various strategies
 - `remove_duplicates()`: Remove duplicate rows
 - `handle_outliers()`: Handle outliers
@@ -668,6 +735,20 @@ Advanced target-aware analysis for ML tasks (requires target column).
 - `drop_columns()`: Drop specified columns
 - `rename_columns()`: Rename columns
 - `apply_custom_function()`: Apply custom transformation
+
+**String Preprocessing (NEW v2.2.0):**
+- `clean_string_columns()`: Clean string columns with 7 operations (strip, lower, upper, title, remove_punctuation, remove_digits, remove_extra_spaces)
+- `handle_whitespace_variants()`: Standardize whitespace variants in categorical columns
+- `extract_string_length()`: Create length features from string columns
+
+**Data Validation (NEW v2.2.0):**
+- `validate_data_quality()`: Comprehensive quality report (missing values, constant columns, infinite values, duplicates)
+- `detect_infinite_values()`: Detect np.inf/-np.inf in numeric columns
+- `create_missing_indicators()`: Create binary indicator columns for missing values
+
+**Operation Tracking (NEW v2.2.0):**
+- `get_preprocessing_summary()`: Get formatted text summary of all preprocessing operations
+- `export_summary()`: Export preprocessing history to text/markdown/JSON formats
 
 ### FeatureEngineer
 

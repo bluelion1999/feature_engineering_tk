@@ -9,15 +9,15 @@ A comprehensive Python toolkit for feature engineering and advanced data analysi
 ## Features
 
 - **Smart Data Analysis**: Automatic EDA with comprehensive statistics and visualizations
-- **Column Type Detection**: Identify misclassified categorical columns and binning opportunities (NEW v2.2.0)
+- **Column Type Detection**: Identify misclassified categorical columns and binning opportunities
 - **Target-Aware Analysis**: Advanced statistical analysis that auto-detects classification vs regression tasks
 - **Intelligent Recommendations**: Automated feature engineering suggestions based on data characteristics
 - **Model Recommendations**: ML algorithm suggestions tailored to your dataset
 - **Complete Preprocessing**: Handle missing values, outliers, duplicates with 8+ strategies
-- **String Preprocessing**: Clean and extract features from text columns (NEW v2.2.0)
-- **Data Validation**: Comprehensive quality checks and infinite value detection (NEW v2.2.0)
-- **Method Chaining**: Fluent API for chaining preprocessing operations (NEW v2.2.0)
-- **Operation Tracking**: Automatic logging and export of preprocessing history (NEW v2.2.0)
+- **String Preprocessing**: Clean and extract features from text columns
+- **Data Validation**: Comprehensive quality checks and infinite value detection
+- **Method Chaining**: Fluent API for chaining preprocessing operations
+- **Operation Tracking**: Automatic logging and export of preprocessing history
 - **Feature Engineering**: 12+ transformation methods including encoding, scaling, binning, datetime extraction
 - **Feature Selection**: 6+ selection methods with automatic pipeline
 - **Report Generation**: Export comprehensive analysis reports in HTML, Markdown, or JSON
@@ -677,8 +677,8 @@ General-purpose exploratory data analysis (no target column required).
 - `get_high_correlations()`: Find highly correlated feature pairs
 - `calculate_vif()`: Calculate Variance Inflation Factor for multicollinearity detection
 - `get_cardinality_info()`: Get cardinality information for categorical features
-- `detect_misclassified_categorical()`: Identify numeric columns that should be categorical (NEW v2.2.0)
-- `suggest_binning()`: Get intelligent binning recommendations based on distributions (NEW v2.2.0)
+- `detect_misclassified_categorical()`: Identify numeric columns that should be categorical
+- `suggest_binning()`: Get intelligent binning recommendations based on distributions
 
 **Visualization Methods:**
 - `plot_missing_values()`: Visualize missing values heatmap
@@ -736,17 +736,17 @@ Advanced target-aware analysis for ML tasks (requires target column).
 - `rename_columns()`: Rename columns
 - `apply_custom_function()`: Apply custom transformation
 
-**String Preprocessing (NEW v2.2.0):**
+**String Preprocessing:**
 - `clean_string_columns()`: Clean string columns with 7 operations (strip, lower, upper, title, remove_punctuation, remove_digits, remove_extra_spaces)
 - `handle_whitespace_variants()`: Standardize whitespace variants in categorical columns
 - `extract_string_length()`: Create length features from string columns
 
-**Data Validation (NEW v2.2.0):**
+**Data Validation:**
 - `validate_data_quality()`: Comprehensive quality report (missing values, constant columns, infinite values, duplicates)
 - `detect_infinite_values()`: Detect np.inf/-np.inf in numeric columns
 - `create_missing_indicators()`: Create binary indicator columns for missing values
 
-**Operation Tracking (NEW v2.2.0):**
+**Operation Tracking:**
 - `get_preprocessing_summary()`: Get formatted text summary of all preprocessing operations
 - `export_summary()`: Export preprocessing history to text/markdown/JSON formats
 

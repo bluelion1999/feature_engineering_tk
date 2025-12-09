@@ -4,6 +4,13 @@ import logging
 from typing import List, Optional, Union, Dict, Any
 from datetime import datetime
 
+from .base import FeatureEngineeringBase
+from .utils import (
+    validate_columns,
+    get_numeric_columns,
+    validate_numeric_columns,
+    get_string_columns
+)
 from .exceptions import (
     ValidationError,
     InvalidStrategyError,
@@ -16,7 +23,7 @@ from .exceptions import (
 logger = logging.getLogger(__name__)
 
 
-class DataPreprocessor:
+class DataPreprocessor(FeatureEngineeringBase):
     """
     Data preprocessing class for cleaning and preparing data.
 
@@ -49,11 +56,7 @@ class DataPreprocessor:
         Args:
             df: Input pandas DataFrame
         """
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError("Input must be a pandas DataFrame")
-        if df.empty:
-            logger.warning("Initializing with empty DataFrame")
-        self.df = df.copy()
+        super().__init__(df)
         self._operation_history: List[Dict[str, Any]] = []
 
     def _log_operation(self, method_name: str, parameters: Dict[str, Any],
@@ -138,12 +141,8 @@ class DataPreprocessor:
 
         if columns is None:
             columns = df_result.columns.tolist()
-
-        # Validate columns exist
-        invalid_cols = [col for col in columns if col not in df_result.columns]
-        if invalid_cols:
-            logger.warning(f"Columns not found in dataframe: {invalid_cols}")
-            columns = [col for col in columns if col in df_result.columns]
+        else:
+            columns = validate_columns(df_result, columns)
 
         if not columns:
             logger.warning("No valid columns to process")
@@ -168,14 +167,14 @@ class DataPreprocessor:
             df_result[columns] = df_result[columns].fillna(fill_value)
 
         elif strategy == 'mean':
-            numeric_cols = df_result[columns].select_dtypes(include=[np.number]).columns
+            numeric_cols = get_numeric_columns(df_result, columns)
             if len(numeric_cols) == 0:
                 logger.warning("No numeric columns found for mean strategy")
             else:
                 df_result[numeric_cols] = df_result[numeric_cols].fillna(df_result[numeric_cols].mean())
 
         elif strategy == 'median':
-            numeric_cols = df_result[columns].select_dtypes(include=[np.number]).columns
+            numeric_cols = get_numeric_columns(df_result, columns)
             if len(numeric_cols) == 0:
                 logger.warning("No numeric columns found for median strategy")
             else:
@@ -196,7 +195,7 @@ class DataPreprocessor:
             df_result[columns] = df_result[columns].bfill()
 
         elif strategy == 'interpolate':
-            numeric_cols = df_result[columns].select_dtypes(include=[np.number]).columns
+            numeric_cols = get_numeric_columns(df_result, columns)
             if len(numeric_cols) == 0:
                 logger.warning("No numeric columns found for interpolate strategy")
             else:
@@ -239,10 +238,9 @@ class DataPreprocessor:
         df_result = self.df if inplace else self.df.copy()
 
         if subset is not None:
-            invalid_cols = [col for col in subset if col not in df_result.columns]
-            if invalid_cols:
-                logger.warning(f"Subset columns not found: {invalid_cols}")
-                subset = [col for col in subset if col in df_result.columns] or None
+            subset = validate_columns(df_result, subset)
+            if not subset:
+                subset = None
 
         rows_before_drop = len(df_result)
         df_result = df_result.drop_duplicates(subset=subset, keep=keep)
@@ -311,15 +309,13 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
-        for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found in dataframe")
-                continue
+        # Validate columns are numeric
+        columns = validate_numeric_columns(df_result, columns)
+        if not columns:
+            logger.warning("No valid numeric columns to process")
+            return df_result if not inplace else self
 
-            # Ensure column is numeric
-            if not np.issubdtype(df_result[col].dtype, np.number):
-                logger.warning(f"Column '{col}' is not numeric, skipping")
-                continue
+        for col in columns:
 
             if method == 'iqr':
                 Q1 = df_result[col].quantile(0.25)
@@ -397,10 +393,11 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
-        for col, dtype in dtype_map.items():
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found in dataframe")
-                continue
+        # Validate columns exist
+        valid_cols = validate_columns(df_result, list(dtype_map.keys()))
+
+        for col in valid_cols:
+            dtype = dtype_map[col]
 
             try:
                 if dtype == 'datetime':
@@ -435,13 +432,10 @@ class DataPreprocessor:
         """
         df_result = self.df if inplace else self.df.copy()
 
-        if column not in df_result.columns:
-            logger.warning(f"Column '{column}' not found in dataframe")
-            return df_result if not inplace else self.df
-
-        if not np.issubdtype(df_result[column].dtype, np.number):
-            logger.warning(f"Column '{column}' is not numeric")
-            return df_result if not inplace else self.df
+        # Validate column exists and is numeric
+        valid_cols = validate_numeric_columns(df_result, [column])
+        if not valid_cols:
+            return df_result if not inplace else self
 
         # Validate lower < upper
         if lower is not None and upper is not None and lower >= upper:
@@ -580,10 +574,8 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
-        existing_cols = [col for col in columns if col in df_result.columns]
-        if len(existing_cols) < len(columns):
-            missing = set(columns) - set(existing_cols)
-            logger.warning(f"Columns not found: {missing}")
+        # Validate columns exist
+        existing_cols = validate_columns(df_result, columns)
 
         if existing_cols:
             df_result = df_result.drop(columns=existing_cols)
@@ -642,10 +634,8 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
-        missing_cols = [col for col in column_order if col not in df_result.columns]
-        if missing_cols:
-            logger.warning(f"Columns not found in dataframe: {missing_cols}")
-            column_order = [col for col in column_order if col in df_result.columns]
+        # Validate columns exist
+        column_order = validate_columns(df_result, column_order)
 
         other_cols = [col for col in df_result.columns if col not in column_order]
         final_order = column_order + other_cols
@@ -680,9 +670,10 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
-        if column not in df_result.columns:
-            logger.warning(f"Column '{column}' not found in dataframe")
-            return df_result if not inplace else self.df
+        # Validate column exists
+        valid_cols = validate_columns(df_result, [column])
+        if not valid_cols:
+            return df_result if not inplace else self
 
         target_col = new_column if new_column else column
         try:
@@ -802,14 +793,13 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
-        for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found, skipping")
-                continue
+        # Validate columns are string type
+        columns = get_string_columns(df_result, columns)
+        if not columns:
+            logger.warning("No valid string columns to process")
+            return df_result if not inplace else self
 
-            if df_result[col].dtype != 'object':
-                logger.warning(f"Column '{col}' is not string type, skipping")
-                continue
+        for col in columns:
 
             # Apply operations in order
             for op in operations:
@@ -867,14 +857,13 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
-        for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found, skipping")
-                continue
+        # Validate columns are string type
+        columns = get_string_columns(df_result, columns)
+        if not columns:
+            logger.warning("No valid string columns to process")
+            return df_result if not inplace else self
 
-            if df_result[col].dtype != 'object':
-                logger.warning(f"Column '{col}' is not string type, skipping")
-                continue
+        for col in columns:
 
             before_unique = df_result[col].nunique()
             df_result[col] = df_result[col].str.strip()
@@ -912,14 +901,13 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
-        for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found, skipping")
-                continue
+        # Validate columns are string type
+        columns = get_string_columns(df_result, columns)
+        if not columns:
+            logger.warning("No valid string columns to process")
+            return df_result if not inplace else self
 
-            if df_result[col].dtype != 'object':
-                logger.warning(f"Column '{col}' is not string type, skipping")
-                continue
+        for col in columns:
 
             new_col = f"{col}{suffix}"
             df_result[new_col] = df_result[col].str.len()
@@ -998,7 +986,7 @@ class DataPreprocessor:
             )
 
         # Infinite values
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns
+        numeric_cols = get_numeric_columns(self.df)
         for col in numeric_cols:
             inf_count = np.isinf(self.df[col]).sum()
             if inf_count > 0:
@@ -1029,19 +1017,15 @@ class DataPreprocessor:
             >>> print(inf_counts)
         """
         if columns is None:
-            columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            columns = get_numeric_columns(self.df)
         else:
             if not isinstance(columns, list):
                 raise TypeError("columns must be a list")
             # Validate columns are numeric
-            numeric_cols = self.df.select_dtypes(include=[np.number]).columns
-            columns = [col for col in columns if col in numeric_cols]
+            columns = validate_numeric_columns(self.df, columns)
 
         infinite_counts = {}
         for col in columns:
-            if col not in self.df.columns:
-                logger.warning(f"Column '{col}' not found, skipping")
-                continue
 
             inf_count = np.isinf(self.df[col]).sum()
             if inf_count > 0:
@@ -1076,10 +1060,13 @@ class DataPreprocessor:
 
         df_result = self.df if inplace else self.df.copy()
 
+        # Validate columns exist
+        columns = validate_columns(df_result, columns)
+        if not columns:
+            logger.warning("No valid columns to process")
+            return df_result if not inplace else self
+
         for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found, skipping")
-                continue
 
             new_col = f"{col}{suffix}"
             df_result[new_col] = self.df[col].isnull().astype(int)
@@ -1227,12 +1214,3 @@ class DataPreprocessor:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(summary_text)
             logger.info(f"Exported preprocessing summary to {filepath} (text format)")
-
-    def get_dataframe(self) -> pd.DataFrame:
-        """
-        Return a copy of the current dataframe.
-
-        Returns:
-            Copy of internal DataFrame
-        """
-        return self.df.copy()

@@ -11,30 +11,24 @@ from sklearn.feature_selection import mutual_info_classif, mutual_info_regressio
 from sklearn.metrics import r2_score
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
+from .base import FeatureEngineeringBase
+from .utils import (
+    validate_columns,
+    get_numeric_columns,
+    get_feature_columns
+)
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
-class DataAnalyzer:
+class DataAnalyzer(FeatureEngineeringBase):
     """
     Data analysis class for exploratory data analysis and visualization.
 
     Provides statistical summaries, outlier detection, correlation analysis,
     and visualization tools.
     """
-
-    def __init__(self, df: pd.DataFrame):
-        """
-        Initialize DataAnalyzer with a dataframe.
-
-        Args:
-            df: Input pandas DataFrame
-        """
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError("Input must be a pandas DataFrame")
-        if df.empty:
-            logger.warning("Initializing with empty DataFrame")
-        self.df = df.copy()
 
     def get_basic_info(self) -> Dict[str, Any]:
         """Get basic information about the dataframe."""
@@ -63,7 +57,7 @@ class DataAnalyzer:
         if percentiles is None:
             percentiles = [0.25, 0.5, 0.75]
 
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns
+        numeric_cols = get_numeric_columns(self.df)
         if len(numeric_cols) == 0:
             return pd.DataFrame()
 
@@ -94,12 +88,12 @@ class DataAnalyzer:
     def detect_outliers_iqr(self, columns: Optional[List[str]] = None, multiplier: float = 1.5) -> Dict[str, pd.Series]:
         """Detect outliers using IQR method."""
         if columns is None:
-            columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            columns = get_numeric_columns(self.df)
+        else:
+            columns = validate_columns(self.df, columns)
 
         outliers = {}
         for col in columns:
-            if col not in self.df.columns:
-                continue
 
             Q1 = self.df[col].quantile(0.25)
             Q3 = self.df[col].quantile(0.75)
@@ -117,12 +111,12 @@ class DataAnalyzer:
     def detect_outliers_zscore(self, columns: Optional[List[str]] = None, threshold: float = 3.0) -> Dict[str, pd.Series]:
         """Detect outliers using Z-score method."""
         if columns is None:
-            columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            columns = get_numeric_columns(self.df)
+        else:
+            columns = validate_columns(self.df, columns)
 
         outliers = {}
         for col in columns:
-            if col not in self.df.columns:
-                continue
 
             # Fixed: Add division by zero check
             col_std = self.df[col].std()
@@ -140,12 +134,12 @@ class DataAnalyzer:
 
     def get_correlation_matrix(self, method: str = 'pearson', min_correlation: float = 0.0) -> pd.DataFrame:
         """Get correlation matrix for numeric columns."""
-        numeric_df = self.df.select_dtypes(include=[np.number])
+        numeric_cols = get_numeric_columns(self.df)
 
-        if numeric_df.shape[1] < 2:
+        if len(numeric_cols) < 2:
             return pd.DataFrame()
 
-        corr_matrix = numeric_df.corr(method=method)
+        corr_matrix = self.df[numeric_cols].corr(method=method)
 
         if min_correlation > 0:
             mask = np.abs(corr_matrix) >= min_correlation
@@ -212,7 +206,9 @@ class DataAnalyzer:
             - VIF < 5: Low multicollinearity
         """
         if columns is None:
-            columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            columns = get_numeric_columns(self.df)
+        else:
+            columns = validate_columns(self.df, columns)
 
         if len(columns) < 2:
             logger.warning("Need at least 2 numeric columns for VIF calculation")
@@ -262,7 +258,7 @@ class DataAnalyzer:
             DataFrame with columns: column, unique_count, unique_ratio, dtype, suggestion
             Sorted by unique_count ascending (most likely categorical first)
         """
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns
+        numeric_cols = get_numeric_columns(self.df)
 
         if len(numeric_cols) == 0:
             return pd.DataFrame()
@@ -335,7 +331,7 @@ class DataAnalyzer:
             DataFrame with columns: column, strategy, num_bins, reason
             Sorted by priority (columns that would benefit most from binning first)
         """
-        numeric_cols = self.df.select_dtypes(include=[np.number]).columns
+        numeric_cols = get_numeric_columns(self.df)
 
         if len(numeric_cols) == 0:
             return pd.DataFrame()
@@ -487,7 +483,9 @@ class DataAnalyzer:
             matplotlib.figure.Figure: The figure object, or None if no columns to plot
         """
         if columns is None:
-            columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            columns = get_numeric_columns(self.df)
+        else:
+            columns = validate_columns(self.df, columns)
 
         if not columns:
             logger.warning("No numeric columns to plot")
@@ -919,7 +917,7 @@ class TargetAnalyzer:
             DataFrame with columns: feature, test_type, statistic, pvalue, significant (at α=0.05)
         """
         if feature_columns is None:
-            feature_columns = [col for col in self.df.columns if col != self.target_column]
+            feature_columns = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=False)
 
         results = []
         target = self.df[self.target_column].dropna()
@@ -1017,8 +1015,7 @@ class TargetAnalyzer:
             return {}
 
         if feature_columns is None:
-            feature_columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
-            feature_columns = [col for col in feature_columns if col != self.target_column]
+            feature_columns = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=True)
 
         results = {}
         classes = sorted(self.df[self.target_column].dropna().unique())
@@ -1113,8 +1110,7 @@ class TargetAnalyzer:
             return pd.DataFrame()
 
         if feature_columns is None:
-            feature_columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
-            feature_columns = [col for col in feature_columns if col != self.target_column]
+            feature_columns = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=True)
 
         results = []
         for feature in feature_columns:
@@ -1164,11 +1160,10 @@ class TargetAnalyzer:
             DataFrame with columns: feature, mutual_info, normalized_mi
         """
         if feature_columns is None:
-            feature_columns = [col for col in self.df.columns if col != self.target_column]
+            feature_columns = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=False)
 
         # Prepare data - only numeric features for MI
-        numeric_features = [col for col in feature_columns
-                           if pd.api.types.is_numeric_dtype(self.df[col])]
+        numeric_features = get_numeric_columns(self.df, columns=feature_columns)
 
         if not numeric_features:
             logger.warning("No numeric features found for mutual information analysis")
@@ -1391,7 +1386,7 @@ class TargetAnalyzer:
         results = {}
 
         # Missing values analysis
-        feature_cols = [col for col in self.df.columns if col != self.target_column]
+        feature_cols = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=False)
         missing_by_feature = {}
         for col in feature_cols:
             missing_count = self.df[col].isnull().sum()
@@ -1468,8 +1463,7 @@ class TargetAnalyzer:
             For general VIF calculation without a target, use DataAnalyzer directly.
         """
         if feature_columns is None:
-            feature_columns = self.df.select_dtypes(include=[np.number]).columns.tolist()
-            feature_columns = [col for col in feature_columns if col != self.target_column]
+            feature_columns = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=True)
 
         # Delegate to DataAnalyzer implementation
         analyzer = DataAnalyzer(self.df)
@@ -1868,9 +1862,9 @@ class TargetAnalyzer:
             List of dicts with 'feature', 'suggestion', 'reason', and 'priority' keys
         """
         suggestions = []
-        features = [col for col in self.df.columns if col != self.target_column]
-        numeric_features = self.df[features].select_dtypes(include=[np.number]).columns.tolist()
-        categorical_features = self.df[features].select_dtypes(exclude=[np.number]).columns.tolist()
+        features = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=False)
+        numeric_features = get_numeric_columns(self.df, columns=features)
+        categorical_features = [col for col in features if col not in numeric_features]
 
         # 1. Analyze numeric features for transformations
         for feature in numeric_features:

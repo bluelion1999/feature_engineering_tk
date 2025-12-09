@@ -82,6 +82,70 @@
 - 5 tests for binning suggestions (skewed, uniform, outliers, thresholds, edge cases)
 - All tests passing ✅
 
+### Redundancy Reduction Refactoring (2025-12-09)
+**Status**: Completed on fly_catcher branch
+**Impact**: ~300 lines of redundant code eliminated, improved maintainability
+
+#### New Shared Infrastructure
+
+1. **FeatureEngineeringBase Base Class** (`base.py`):
+   - Shared `__init__()` method with DataFrame validation and copying
+   - Shared `get_dataframe()` method
+   - All 5 main classes inherit from this base
+   - Eliminates ~50 lines of duplicate initialization code
+
+2. **Utility Functions Module** (`utils.py`):
+   - `validate_and_copy_dataframe()`: DataFrame validation and copying
+   - `validate_columns()`: Column existence validation with options
+   - `get_numeric_columns()`: Extract numeric columns from DataFrame
+   - `validate_numeric_columns()`: Validate and filter numeric columns
+   - `get_string_columns()`: Extract string/object columns
+   - `get_feature_columns()`: Get feature columns with exclusions
+   - Eliminates ~250 lines of duplicate validation code
+
+3. **@inplace_transform Decorator** (`base.py`):
+   - Handles inplace transformation pattern automatically
+   - Available for future use in simplifying method implementations
+
+#### Refactored Classes
+
+1. **DataPreprocessor** (30+ methods updated):
+   - Inherits from FeatureEngineeringBase
+   - Uses utility functions throughout (22 validation patterns replaced)
+   - `handle_outliers()` now uses DataAnalyzer detection methods
+   - Net reduction: 45 lines removed
+
+2. **FeatureEngineer** (12+ methods updated):
+   - Inherits from FeatureEngineeringBase
+   - Removed duplicate `get_dataframe()` method
+   - Uses utility functions for validation
+   - Net reduction: 41 lines removed
+
+3. **DataAnalyzer**:
+   - Inherits from FeatureEngineeringBase
+   - Uses utility functions for numeric column selection (8 methods)
+   - Removed duplicate `__init__` method
+
+4. **TargetAnalyzer**:
+   - Inherits from FeatureEngineeringBase
+   - Simplified `__init__` to call `super()`
+   - Uses `get_feature_columns()` utility for target exclusion
+
+5. **FeatureSelector**:
+   - Inherits from FeatureEngineeringBase
+   - Removed internal `_get_feature_columns()` helper
+   - Uses shared `get_feature_columns()` utility
+
+#### Benefits
+
+- **Code Reduction**: ~300 lines of redundant code eliminated (6.5% of codebase)
+- **Single Source of Truth**: Validation logic centralized in utils.py
+- **Consistency**: All classes use identical validation patterns
+- **Maintainability**: Changes to validation need only be made once
+- **Testing**: Utility functions can be tested independently
+- **Outlier Detection**: DataPreprocessor delegates to DataAnalyzer (DRY principle)
+- **All 182 tests passing**: 100% backward compatibility maintained
+
 ### Architecture Refactoring (2025-11-24)
 1. **VIF Relocation**: Moved `calculate_vif()` from TargetAnalyzer to DataAnalyzer
    - VIF is target-independent multicollinearity detection
@@ -116,6 +180,8 @@
 mltoolkit/
 ├── feature_engineering_tk/    # Main package
 │   ├── __init__.py
+│   ├── base.py                # Base class and decorators (NEW)
+│   ├── utils.py               # Shared utility functions (NEW)
 │   ├── data_analysis.py       # EDA and visualization
 │   ├── feature_engineering.py # Feature transformation
 │   ├── preprocessing.py       # Data cleaning
@@ -232,6 +298,37 @@ if not columns:
 ---
 
 ## Module Details
+
+### base.py (NEW)
+**Foundation module providing shared infrastructure**
+
+**FeatureEngineeringBase Class**:
+- Base class for all toolkit classes
+- Shared `__init__(df)`: DataFrame validation and copying
+- Shared `get_dataframe()`: Returns copy of internal DataFrame
+- Inherited by: DataPreprocessor, FeatureEngineer, DataAnalyzer, TargetAnalyzer, FeatureSelector
+
+**@inplace_transform Decorator**:
+- Handles inplace transformation pattern automatically
+- Available for future use in method simplification
+- Manages DataFrame copying and return value logic
+
+### utils.py (NEW)
+**Utility functions for validation and column selection**
+
+**DataFrame Operations**:
+- `validate_and_copy_dataframe(df)`: Validates DataFrame type and creates copy
+
+**Column Validation**:
+- `validate_columns(df, columns, raise_on_missing)`: Returns valid columns, logs/raises for invalid
+- `validate_numeric_columns(df, columns)`: Returns only numeric columns
+- `get_string_columns(df, columns)`: Returns only string/object columns
+
+**Column Selection**:
+- `get_numeric_columns(df, columns)`: Extracts numeric columns
+- `get_feature_columns(df, exclude_columns, numeric_only)`: Gets feature columns with exclusions
+
+**Usage**: All validation and column selection operations throughout the codebase use these utilities for consistency.
 
 ### data_analysis.py
 **Classes**: `DataAnalyzer`, `TargetAnalyzer` (read-only, no inplace operations)

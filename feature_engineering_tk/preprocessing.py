@@ -18,6 +18,7 @@ from .exceptions import (
     DataTypeError,
     EmptyDataFrameError,
 )
+from .data_analysis import DataAnalyzer
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -315,24 +316,33 @@ class DataPreprocessor(FeatureEngineeringBase):
             logger.warning("No valid numeric columns to process")
             return df_result if not inplace else self
 
+        # Create temporary DataAnalyzer for outlier detection
+        analyzer = DataAnalyzer(df_result)
+
         for col in columns:
 
+            # Use DataAnalyzer's detection methods (return Dict[str, pd.Series])
             if method == 'iqr':
+                outlier_dict = analyzer.detect_outliers_iqr([col], multiplier=multiplier)
+                if col not in outlier_dict:
+                    # No outliers detected or column skipped (e.g., constant values)
+                    logger.info(f"No outliers detected in column '{col}'")
+                    continue
+                outlier_mask = outlier_dict[col]
+                # Calculate bounds for capping
                 Q1 = df_result[col].quantile(0.25)
                 Q3 = df_result[col].quantile(0.75)
                 IQR = Q3 - Q1
                 lower_bound = Q1 - multiplier * IQR
                 upper_bound = Q3 + multiplier * IQR
-                outlier_mask = (df_result[col] < lower_bound) | (df_result[col] > upper_bound)
 
             elif method == 'zscore':
-                # Fixed: Add division by zero check
-                col_std = df_result[col].std()
-                if col_std == 0:
-                    logger.warning(f"Column '{col}' has zero standard deviation, skipping")
+                outlier_dict = analyzer.detect_outliers_zscore([col], threshold=threshold)
+                if col not in outlier_dict:
+                    # No outliers detected or column skipped (e.g., zero std)
+                    logger.info(f"No outliers detected in column '{col}'")
                     continue
-                z_scores = np.abs((df_result[col] - df_result[col].mean()) / col_std)
-                outlier_mask = z_scores > threshold
+                outlier_mask = outlier_dict[col]
 
             # Log outlier detection
             outlier_count = outlier_mask.sum()

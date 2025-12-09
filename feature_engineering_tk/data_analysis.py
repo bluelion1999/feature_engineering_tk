@@ -516,7 +516,7 @@ class DataAnalyzer(FeatureEngineeringBase):
         return fig
 
 
-class TargetAnalyzer:
+class TargetAnalyzer(FeatureEngineeringBase):
     """
     Target-aware analysis class for classification and regression tasks.
 
@@ -544,16 +544,13 @@ class TargetAnalyzer:
             TypeError: If df is not a pandas DataFrame
             ValueError: If target_column not in dataframe or invalid task specified
         """
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError("Input must be a pandas DataFrame")
-        if df.empty:
-            logger.warning("Initializing with empty DataFrame")
-        if target_column not in df.columns:
+        super().__init__(df)
+
+        if target_column not in self.df.columns:
             raise ValueError(f"Target column '{target_column}' not found in dataframe")
         if task not in ['auto', 'classification', 'regression']:
             raise ValueError("task must be 'auto', 'classification', or 'regression'")
 
-        self.df = df.copy()
         self.target_column = target_column
         self._analysis_cache = {}
 

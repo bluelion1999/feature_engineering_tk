@@ -9,6 +9,12 @@ from sklearn.preprocessing import (
 )
 from typing import List, Optional, Dict, Union, Any
 
+from .base import FeatureEngineeringBase
+from .utils import (
+    validate_columns,
+    get_numeric_columns,
+    validate_numeric_columns
+)
 from .exceptions import (
     ValidationError,
     InvalidMethodError,
@@ -19,7 +25,7 @@ from .exceptions import (
 logger = logging.getLogger(__name__)
 
 
-class FeatureEngineer:
+class FeatureEngineer(FeatureEngineeringBase):
     """
     Feature engineering class for transforming and creating features.
 
@@ -39,11 +45,7 @@ class FeatureEngineer:
         Args:
             df: Input pandas DataFrame
         """
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError("Input must be a pandas DataFrame")
-        if df.empty:
-            logger.warning("Initializing with empty DataFrame")
-        self.df = df.copy()
+        super().__init__(df)
         self.encoders = {}
         self.scalers = {}
 
@@ -63,11 +65,10 @@ class FeatureEngineer:
 
         df_result = self.df if inplace else self.df.copy()
 
-        for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found in dataframe")
-                continue
+        # Use shared validation utility
+        valid_cols = validate_columns(df_result, columns)
 
+        for col in valid_cols:
             encoder = LabelEncoder()
             df_result[col] = encoder.fit_transform(df_result[col].astype(str))
             self.encoders[f"{col}_label"] = encoder
@@ -102,11 +103,10 @@ class FeatureEngineer:
         if prefix is None:
             prefix = {col: col for col in columns}
 
-        for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found in dataframe")
-                continue
+        # Use shared validation utility
+        valid_cols = validate_columns(df_result, columns)
 
+        for col in valid_cols:
             unique_count = df_result[col].nunique()
             if unique_count > self.HIGH_CARDINALITY_WARNING_THRESHOLD:
                 logger.warning(f"Column '{col}' has {unique_count} unique values. "
@@ -148,9 +148,10 @@ class FeatureEngineer:
 
         df_result = self.df if inplace else self.df.copy()
 
-        if column not in df_result.columns:
-            logger.warning(f"Column '{column}' not found in dataframe")
-            return df_result if not inplace else self.df
+        # Use shared validation utility
+        valid_cols = validate_columns(df_result, column)
+        if not valid_cols:
+            return df_result if not inplace else self
 
         encoder = OrdinalEncoder(
             categories=[categories],
@@ -210,21 +211,11 @@ class FeatureEngineer:
 
         scaler = scalers_map[method]
 
-        valid_cols = [col for col in columns if col in df_result.columns]
-        if not valid_cols:
-            logger.warning("None of the specified columns found in dataframe")
-            return df_result if not inplace else self.df
-
-        # Validate columns are numeric
-        non_numeric = [col for col in valid_cols
-                      if not np.issubdtype(df_result[col].dtype, np.number)]
-        if non_numeric:
-            logger.warning(f"Non-numeric columns will be skipped: {non_numeric}")
-            valid_cols = [col for col in valid_cols if col not in non_numeric]
+        # Use shared validation utilities
+        valid_cols = validate_numeric_columns(df_result, columns)
 
         if not valid_cols:
-            logger.warning("No numeric columns to scale")
-            return df_result if not inplace else self.df
+            return df_result if not inplace else self
 
         df_result[valid_cols] = scaler.fit_transform(df_result[valid_cols])
         self.scalers[f"{method}_scaler"] = scaler
@@ -261,20 +252,11 @@ class FeatureEngineer:
 
         df_result = self.df if inplace else self.df.copy()
 
-        valid_cols = [col for col in columns if col in df_result.columns]
-        if not valid_cols:
-            logger.warning("None of the specified columns found in dataframe")
-            return df_result if not inplace else self.df
-
-        # Validate numeric
-        non_numeric = [col for col in valid_cols
-                      if not np.issubdtype(df_result[col].dtype, np.number)]
-        if non_numeric:
-            logger.warning(f"Non-numeric columns will be skipped: {non_numeric}")
-            valid_cols = [col for col in valid_cols if col not in non_numeric]
+        # Use shared validation utilities
+        valid_cols = validate_numeric_columns(df_result, columns)
 
         if not valid_cols:
-            return df_result if not inplace else self.df
+            return df_result if not inplace else self
 
         features_created = 0
 
@@ -327,13 +309,10 @@ class FeatureEngineer:
 
         df_result = self.df if inplace else self.df.copy()
 
-        if column not in df_result.columns:
-            logger.warning(f"Column '{column}' not found in dataframe")
-            return df_result if not inplace else self.df
-
-        if not np.issubdtype(df_result[column].dtype, np.number):
-            logger.warning(f"Column '{column}' is not numeric")
-            return df_result if not inplace else self.df
+        # Use shared validation utilities
+        valid_cols = validate_numeric_columns(df_result, [column])
+        if not valid_cols:
+            return df_result if not inplace else self
 
         new_col_name = f"{column}_binned"
 
@@ -385,15 +364,10 @@ class FeatureEngineer:
 
         df_result = self.df if inplace else self.df.copy()
 
-        for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found in dataframe")
-                continue
+        # Use shared validation utilities
+        valid_cols = validate_numeric_columns(df_result, columns)
 
-            if not np.issubdtype(df_result[col].dtype, np.number):
-                logger.warning(f"Column '{col}' is not numeric, skipping")
-                continue
-
+        for col in valid_cols:
             min_val = df_result[col].min()
             if min_val <= 0:
                 offset = abs(min_val) + 1
@@ -425,15 +399,10 @@ class FeatureEngineer:
 
         df_result = self.df if inplace else self.df.copy()
 
-        for col in columns:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found in dataframe")
-                continue
+        # Use shared validation utilities
+        valid_cols = validate_numeric_columns(df_result, columns)
 
-            if not np.issubdtype(df_result[col].dtype, np.number):
-                logger.warning(f"Column '{col}' is not numeric, skipping")
-                continue
-
+        for col in valid_cols:
             min_val = df_result[col].min()
             if min_val < 0:
                 logger.warning(f"Column '{col}' contains negative values, skipping")
@@ -463,9 +432,10 @@ class FeatureEngineer:
         """
         df_result = self.df if inplace else self.df.copy()
 
-        if column not in df_result.columns:
-            logger.warning(f"Column '{column}' not found in dataframe")
-            return df_result if not inplace else self.df
+        # Use shared validation utility
+        valid_cols = validate_columns(df_result, column)
+        if not valid_cols:
+            return df_result if not inplace else self
 
         if not pd.api.types.is_datetime64_any_dtype(df_result[column]):
             try:
@@ -473,7 +443,7 @@ class FeatureEngineer:
                 logger.info(f"Converted column '{column}' to datetime")
             except Exception as e:
                 logger.error(f"Could not convert '{column}' to datetime: {e}")
-                return df_result if not inplace else self.df
+                return df_result if not inplace else self
 
         if features is None:
             features = ['year', 'month', 'day', 'dayofweek', 'hour', 'minute', 'quarter']
@@ -531,15 +501,16 @@ class FeatureEngineer:
         if isinstance(group_by, str):
             group_by = [group_by]
 
-        # Validate columns
-        for col in group_by + [agg_column]:
-            if col not in df_result.columns:
-                logger.warning(f"Column '{col}' not found in dataframe")
-                return df_result if not inplace else self.df
+        # Use shared validation utilities
+        all_cols = group_by + [agg_column]
+        valid_cols = validate_columns(df_result, all_cols)
+        if len(valid_cols) != len(all_cols):
+            return df_result if not inplace else self
 
-        if not np.issubdtype(df_result[agg_column].dtype, np.number):
-            logger.warning(f"Aggregation column '{agg_column}' is not numeric")
-            return df_result if not inplace else self.df
+        # Validate agg_column is numeric
+        numeric_cols = validate_numeric_columns(df_result, [agg_column])
+        if not numeric_cols:
+            return df_result if not inplace else self
 
         features_created = 0
         for func in agg_funcs:
@@ -577,14 +548,10 @@ class FeatureEngineer:
         """
         df_result = self.df if inplace else self.df.copy()
 
-        if numerator not in df_result.columns or denominator not in df_result.columns:
-            logger.warning("One or both columns not found in dataframe")
-            return df_result if not inplace else self.df
-
-        for col in [numerator, denominator]:
-            if not np.issubdtype(df_result[col].dtype, np.number):
-                logger.warning(f"Column '{col}' is not numeric")
-                return df_result if not inplace else self.df
+        # Use shared validation utilities
+        valid_cols = validate_numeric_columns(df_result, [numerator, denominator])
+        if len(valid_cols) != 2:
+            return df_result if not inplace else self
 
         if name is None:
             name = f"{numerator}_to_{denominator}_ratio"
@@ -615,9 +582,10 @@ class FeatureEngineer:
         """
         df_result = self.df if inplace else self.df.copy()
 
-        if column not in df_result.columns:
-            logger.warning(f"Column '{column}' not found in dataframe")
-            return df_result if not inplace else self.df
+        # Use shared validation utility
+        valid_cols = validate_columns(df_result, column)
+        if not valid_cols:
+            return df_result if not inplace else self
 
         if flag_name is None:
             flag_name = f"{column}_flag"
@@ -680,12 +648,3 @@ class FeatureEngineer:
         except Exception as e:
             logger.error(f"Error loading transformers: {e}")
             raise
-
-    def get_dataframe(self) -> pd.DataFrame:
-        """
-        Return a copy of the current dataframe.
-
-        Returns:
-            Copy of internal DataFrame
-        """
-        return self.df.copy()

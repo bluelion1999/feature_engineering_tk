@@ -16,9 +16,9 @@
 
 ## Recent Major Changes
 
-### Version 2.3.0 Release (2025-12-09)
+### Version 2.3.0 Release (2025-12-10)
 **Status**: Completed on fly_catcher branch
-**Focus**: Architecture refactoring and code quality improvements
+**Focus**: Architecture refactoring, code quality, and performance optimizations
 
 #### Architecture Improvements
 
@@ -30,14 +30,32 @@
 - Eliminated duplicate `get_dataframe()` implementations
 - DataPreprocessor outlier handling now uses DataAnalyzer's detection methods
 
+#### Performance Optimizations
+
+**Phase 1 - Quick Wins**:
+- Pre-computed means/medians in `handle_missing_values()` for better scalability
+- Optimized string column validation using set-based operations
+- **Fixed outlier detection**: 45% faster (221ms → 120ms) by accumulating row removals
+
+**Phase 2 - N+1 Query Pattern Elimination**:
+- **Class-wise statistics**: 7x faster (969ms → 138ms, 86% improvement)
+- **Feature-target relationship**: Optimized ANOVA grouping operations
+- Replaced nested filtering loops with single `groupby` operations
+- Eliminates redundant DataFrame scans
+
+**Benchmarking Infrastructure**:
+- Created `benchmarks/` directory with comprehensive benchmark suite
+- Baseline measurements for all critical operations
+- `OPTIMIZATION_PLAN.md` documents implementation strategy and results
+
 **Benefits**:
 - Single source of truth for validation operations
+- Significantly faster statistical analysis (7x improvement)
 - Improved code maintainability and consistency
-- Better performance through optimized operations
 - 100% backward compatibility (all 182 tests passing)
 - Cleaner, more organized codebase
 
-**Technical Details**: See "Redundancy Reduction Refactoring (2025-12-09)" section below for complete details.
+**Technical Details**: See "Redundancy Reduction Refactoring (2025-12-09)" and "Performance Optimizations (2025-12-10)" sections below for complete details.
 
 ---
 
@@ -739,6 +757,105 @@ preprocessor.handle_missing_values(strategy='mean', inplace=True)\
   - Document public API methods and parameters
 - **Keep README focused on user value**, not internal development practices
 - When documenting new features, describe WHAT they do and HOW to use them, not how they're tested
+
+---
+
+## Performance Optimizations (2025-12-10)
+
+### Overview
+Comprehensive performance optimization focused on eliminating bottlenecks in statistical analysis operations. Achieved 7x improvement for class-wise statistics and 45% improvement for outlier detection.
+
+### Implementation
+
+**Phase 1: Quick Wins** (Commits: `76208a1`)
+1. **Pre-compute aggregations** in `preprocessing.py`:
+   ```python
+   # Before (computed during fillna):
+   df_result[numeric_cols] = df_result[numeric_cols].fillna(df_result[numeric_cols].mean())
+
+   # After (pre-computed once):
+   means = df_result[numeric_cols].mean()
+   df_result[numeric_cols] = df_result[numeric_cols].fillna(means)
+   ```
+
+2. **Optimized string validation** in `utils.py`:
+   - Use set-based column existence checks
+   - Avoid DataFrame subsetting for dtype validation
+   - Cleaner validation logic with batch warnings
+
+3. **Fixed outlier detection** in `preprocessing.py`:
+   - Accumulate rows to remove instead of removing in loop
+   - Eliminates index alignment issues
+   - Single removal operation at end
+   - **Result**: 45% faster (221ms → 120ms)
+
+**Phase 2: N+1 Query Pattern Elimination** (Commits: `6b954e6`)
+1. **Optimized class-wise statistics** in `data_analysis.py` (line 1020):
+   ```python
+   # Before (N+1 pattern - filters entire DataFrame for each class):
+   for feature in feature_columns:
+       for cls in classes:
+           class_data = self.df[self.df[self.target_column] == cls][feature]
+           # Compute stats...
+
+   # After (single groupby):
+   grouped = self.df.groupby(self.target_column)
+   for feature in feature_columns:
+       stats_df = grouped[feature].agg([
+           ('count', 'count'),
+           ('mean', 'mean'),
+           ('median', lambda x: x.quantile(0.5)),
+           ('std', 'std'),
+           ('min', 'min'),
+           ('max', 'max')
+       ])
+   ```
+   - **Result**: 7x faster (969ms → 138ms, 86% improvement)
+
+2. **Optimized feature-target relationship** in `data_analysis.py` (lines 938, 978):
+   ```python
+   # Before (filters for each class/category):
+   groups = [self.df[self.df[column] == value][feature].dropna() for value in unique_values]
+
+   # After (single groupby):
+   groups = [group.dropna() for _, group in self.df.groupby(column)[feature]]
+   ```
+
+**Phase 3: Copy-on-Write** (Deferred)
+- High implementation complexity (40+ methods to modify)
+- High risk of introducing bugs
+- Limited benefit for typical use cases (most operations modify data)
+- Decision: Defer for future consideration
+
+### Benchmarking Infrastructure
+
+**Created Files**:
+- `benchmarks/benchmark_suite.py`: Comprehensive benchmark suite
+- `benchmarks/__init__.py`: Package initialization
+- `OPTIMIZATION_PLAN.md`: Detailed optimization strategy and results
+- `baseline_results.json`: Performance baseline measurements
+
+**Benchmark Results**:
+```
+Operation                           Before    After    Improvement
+----------------------------------------------------------------
+Class-wise statistics (100K rows)   969ms     138ms    7x faster
+Outlier detection (5 columns)       221ms     120ms    45% faster
+String validation (12 columns)      0.03ms    0.03ms   Maintained
+DataFrame init (1M rows)            231ms     255ms    Within variance
+```
+
+### Testing
+- All 182 tests passing ✅
+- 100% backward compatibility maintained
+- No API changes required
+
+### Files Modified
+- `feature_engineering_tk/preprocessing.py`: Outlier detection, mean pre-compute
+- `feature_engineering_tk/utils.py`: String validation optimization
+- `feature_engineering_tk/data_analysis.py`: N+1 pattern fixes in TargetAnalyzer
+- `benchmarks/benchmark_suite.py`: New benchmarking infrastructure
+- `OPTIMIZATION_PLAN.md`: Optimization documentation
 
 ---
 

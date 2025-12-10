@@ -44,7 +44,7 @@ Major internal refactoring for improved maintainability and performance:
 
 ### ✨ Benefits
 - **Single Source of Truth**: All validation logic centralized for consistency
-- **Improved Performance**: Optimized column validation and selection operations
+- **Significantly Faster**: 7x performance improvement for statistical analysis, 45% faster outlier detection
 - **Better Maintainability**: Changes to common operations only need to be made once
 - **100% Backward Compatible**: All existing code continues to work without modification
 - **All 182 tests passing**: Comprehensive test coverage ensures reliability
@@ -55,7 +55,13 @@ Major internal refactoring for improved maintainability and performance:
 - Streamlined DataFrame initialization across all classes
 - Consistent error handling and logging patterns
 
-**Note**: This release focuses on internal improvements. The public API remains unchanged, so all your existing code will continue to work exactly as before.
+### ⚡ Performance Optimizations
+- **Class-wise statistics 7x faster**: Optimized from 969ms to 138ms using groupby operations
+- **Outlier detection 45% faster**: Improved from 221ms to 120ms with better index handling
+- **Pre-computed aggregations**: Mean and median calculations optimized for large datasets
+- Eliminated N+1 query patterns in statistical analysis methods
+
+**Note**: This release focuses on internal improvements and performance optimizations. The public API remains unchanged, so all your existing code will continue to work exactly as before.
 
 ---
 

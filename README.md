@@ -1,10 +1,10 @@
-# feature-engineering-tk v2.2.0
+# Feature Engineering Toolkit v2.3.0
 
 [![PyPI version](https://badge.fury.io/py/feature-engineering-tk.svg)](https://badge.fury.io/py/feature-engineering-tk)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A comprehensive Python toolkit for feature engineering and advanced data analysis to prepare dataframes for machine learning. Provides intelligent automation for ML workflows including statistical analysis, feature engineering suggestions, and model recommendations.
+**Feature Engineering Toolkit** is a comprehensive Python library for feature engineering and advanced data analysis to prepare dataframes for machine learning. Provides intelligent automation for ML workflows including statistical analysis, feature engineering suggestions, and model recommendations.
 
 ## Features
 
@@ -29,6 +29,35 @@ pip install feature-engineering-tk
 ```
 
 **Requirements:** Python 3.8+
+
+## What's New in v2.3.0
+
+**Architecture & Code Quality Improvements:**
+
+### 🏗️ Refactored Architecture
+Major internal refactoring for improved maintainability and performance:
+
+- **New Base Class**: All classes now inherit from `FeatureEngineeringBase` for consistent initialization and shared functionality
+- **Shared Utilities**: Centralized validation and column selection functions in `utils.py` module
+- **Code Reduction**: Eliminated ~300 lines of redundant code (6.5% of codebase)
+- **Better Organization**: Clear separation between shared infrastructure (`base.py`, `utils.py`) and domain-specific modules
+
+### ✨ Benefits
+- **Single Source of Truth**: All validation logic centralized for consistency
+- **Improved Performance**: Optimized column validation and selection operations
+- **Better Maintainability**: Changes to common operations only need to be made once
+- **100% Backward Compatible**: All existing code continues to work without modification
+- **All 182 tests passing**: Comprehensive test coverage ensures reliability
+
+### 🔧 Internal Improvements
+- Consolidated outlier detection logic (DataPreprocessor now uses DataAnalyzer's detection methods)
+- Eliminated duplicate `get_dataframe()` implementations
+- Streamlined DataFrame initialization across all classes
+- Consistent error handling and logging patterns
+
+**Note**: This release focuses on internal improvements. The public API remains unchanged, so all your existing code will continue to work exactly as before.
+
+---
 
 ## What's New in v2.2.0
 

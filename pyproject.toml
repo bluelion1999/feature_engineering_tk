@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "feature-engineering-tk"
-version = "2.2.0"
-description = "A comprehensive Python toolkit for feature engineering and data analysis"
+version = "2.3.0"
+description = "Feature Engineering Toolkit - A comprehensive Python library for feature engineering and data analysis"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}

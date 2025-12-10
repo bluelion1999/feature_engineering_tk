@@ -155,18 +155,23 @@ def get_string_columns(
         # Get all string columns
         return df.select_dtypes(include=['object']).columns.tolist()
     else:
-        # Validate columns exist and are string type
-        string_cols = []
-        for col in columns:
-            if col not in df.columns:
-                logger.warning(f"Column '{col}' not found in DataFrame, skipping")
-                continue
+        # Optimized validation using sets
+        columns_set = set(df.columns)
+        valid_cols = [col for col in columns if col in columns_set]
+        missing_cols = set(columns) - columns_set
 
-            if df[col].dtype != 'object':
-                logger.warning(f"Column '{col}' is not string type, skipping")
-                continue
+        if missing_cols:
+            logger.warning(f"Columns not found in DataFrame: {missing_cols}")
 
-            string_cols.append(col)
+        if not valid_cols:
+            return []
+
+        # Check dtypes without copying DataFrame
+        string_cols = [col for col in valid_cols if df[col].dtype == 'object']
+        non_string = set(valid_cols) - set(string_cols)
+
+        if non_string:
+            logger.warning(f"Non-string columns skipped: {non_string}")
 
         return string_cols
 

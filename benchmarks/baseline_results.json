@@ -1,0 +1,51 @@
+{
+  "DataPreprocessor.__init__ (1K rows)": {
+    "name": "DataPreprocessor.__init__ (1K rows)",
+    "avg_time": 5.0733331590890884e-05,
+    "std_time": 1.2445700489796402e-05,
+    "min_time": 3.749999450519681e-05,
+    "max_time": 6.739998934790492e-05
+  },
+  "DataPreprocessor.__init__ (100K rows)": {
+    "name": "DataPreprocessor.__init__ (100K rows)",
+    "avg_time": 0.02017713334256162,
+    "std_time": 0.004382624000862618,
+    "min_time": 0.013979199982713908,
+    "max_time": 0.02329360001021996
+  },
+  "DataPreprocessor.__init__ (1M rows)": {
+    "name": "DataPreprocessor.__init__ (1M rows)",
+    "avg_time": 0.22961366669430086,
+    "std_time": 0.05175153916513733,
+    "min_time": 0.15829170000506565,
+    "max_time": 0.2794949000235647
+  },
+  "get_string_columns (12 columns)": {
+    "name": "get_string_columns (12 columns)",
+    "avg_time": 3.273333034788569e-05,
+    "std_time": 3.1094801313602872e-06,
+    "min_time": 3.0099996365606785e-05,
+    "max_time": 3.709999145939946e-05
+  },
+  "TargetAnalyzer.analyze_class_wise_statistics": {
+    "name": "TargetAnalyzer.analyze_class_wise_statistics",
+    "avg_time": 0.9857930666573035,
+    "std_time": 0.005015847471364374,
+    "min_time": 0.9786996999755502,
+    "max_time": 0.9893744000000879
+  },
+  "handle_missing_values (mean strategy)": {
+    "name": "handle_missing_values (mean strategy)",
+    "avg_time": 0.07725099998060614,
+    "std_time": 0.004428423107089012,
+    "min_time": 0.07099249999737367,
+    "max_time": 0.08057969994843006
+  },
+  "handle_outliers (5 columns)": {
+    "name": "handle_outliers (5 columns)",
+    "avg_time": 0.11984386667609215,
+    "std_time": 0.004827139779140098,
+    "min_time": 0.11336130002746359,
+    "max_time": 0.12493829999584705
+  }
+}

@@ -1,19 +1,45 @@
-# MLToolkit - Claude Code Development Documentation
+# Feature Engineering Toolkit - Claude Code Development Documentation
 
-> **Purpose**: Development context for maintaining and extending the MLToolkit repository.
+> **Purpose**: Development context for maintaining and extending the Feature Engineering Toolkit repository.
 
 ## Project Overview
 
-**MLToolkit** is a Python library for feature engineering and data analysis to prepare dataframes for machine learning.
+**Feature Engineering Toolkit** (package name: `feature-engineering-tk`) is a comprehensive Python library for feature engineering and data analysis to prepare dataframes for machine learning.
 
 - **Repository**: https://github.com/bluelion1999/feature_engineering_tk
 - **Default Branch**: master
 - **Python Version**: 3.8+
-- **Last Major Refactor**: 2025-11-22
+- **Current Version**: 2.3.0
+- **Last Major Refactor**: 2025-12-09 (Redundancy Reduction)
 
 ---
 
 ## Recent Major Changes
+
+### Version 2.3.0 Release (2025-12-09)
+**Status**: Completed on fly_catcher branch
+**Focus**: Architecture refactoring and code quality improvements
+
+#### Architecture Improvements
+
+**Refactored Codebase** (~300 lines eliminated, 6.5% reduction):
+- Created `FeatureEngineeringBase` base class for all toolkit classes
+- Created `utils.py` module with 7 shared utility functions
+- All 5 main classes now inherit from common base
+- Consolidated validation logic into reusable utilities
+- Eliminated duplicate `get_dataframe()` implementations
+- DataPreprocessor outlier handling now uses DataAnalyzer's detection methods
+
+**Benefits**:
+- Single source of truth for validation operations
+- Improved code maintainability and consistency
+- Better performance through optimized operations
+- 100% backward compatibility (all 182 tests passing)
+- Cleaner, more organized codebase
+
+**Technical Details**: See "Redundancy Reduction Refactoring (2025-12-09)" section below for complete details.
+
+---
 
 ### Version 2.2.0 Release (2025-12-07)
 **Status**: Ready for release

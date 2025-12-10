@@ -172,14 +172,16 @@ class DataPreprocessor(FeatureEngineeringBase):
             if len(numeric_cols) == 0:
                 logger.warning("No numeric columns found for mean strategy")
             else:
-                df_result[numeric_cols] = df_result[numeric_cols].fillna(df_result[numeric_cols].mean())
+                means = df_result[numeric_cols].mean()  # Pre-compute once
+                df_result[numeric_cols] = df_result[numeric_cols].fillna(means)
 
         elif strategy == 'median':
             numeric_cols = get_numeric_columns(df_result, columns)
             if len(numeric_cols) == 0:
                 logger.warning("No numeric columns found for median strategy")
             else:
-                df_result[numeric_cols] = df_result[numeric_cols].fillna(df_result[numeric_cols].median())
+                medians = df_result[numeric_cols].median()  # Pre-compute once
+                df_result[numeric_cols] = df_result[numeric_cols].fillna(medians)
 
         elif strategy == 'mode':
             for col in columns:
@@ -319,6 +321,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         # Create temporary DataAnalyzer for outlier detection
         analyzer = DataAnalyzer(df_result)
 
+        # Accumulate rows to remove (for 'remove' action)
+        rows_to_remove = set()
+
         for col in columns:
 
             # Use DataAnalyzer's detection methods (return Dict[str, pd.Series])
@@ -350,11 +355,13 @@ class DataPreprocessor(FeatureEngineeringBase):
             logger.info(f"Detected {outlier_count} outliers in '{col}' ({outlier_pct:.1f}%) using {method} method")
 
             if action == 'remove':
+                # Accumulate indices to remove (apply once at end)
+                outlier_indices = outlier_mask[outlier_mask].index
+                rows_to_remove.update(outlier_indices)
                 # Warn if removing too many rows
                 if outlier_count > len(df_result) * self.DESTRUCTIVE_OPERATION_THRESHOLD:
-                    logger.warning(f"Removing outliers from '{col}' would remove {outlier_pct:.1f}% of data. "
+                    logger.warning(f"Outliers in '{col}' represent {outlier_pct:.1f}% of data. "
                                  f"Consider using action='cap' or 'replace' instead.")
-                df_result = df_result[~outlier_mask]
 
             elif action == 'cap':
                 if method == 'iqr':
@@ -370,6 +377,10 @@ class DataPreprocessor(FeatureEngineeringBase):
                     df_result.loc[outlier_mask, col] = df_result[col].mean()
                 elif replace_with == 'nan':
                     df_result.loc[outlier_mask, col] = np.nan
+
+        # Apply row removal once at end (if action='remove')
+        if action == 'remove' and rows_to_remove:
+            df_result = df_result.drop(index=rows_to_remove)
 
         if inplace:
             df_result = df_result.reset_index(drop=True)

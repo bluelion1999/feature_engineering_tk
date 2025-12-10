@@ -934,8 +934,8 @@ class TargetAnalyzer(FeatureEngineeringBase):
                 if self.task == 'classification':
                     if pd.api.types.is_numeric_dtype(self.df[feature]):
                         # ANOVA F-test for numeric feature vs categorical target
-                        groups = [self.df[self.df[self.target_column] == cls][feature].dropna()
-                                  for cls in target.unique()]
+                        # Optimized: use groupby instead of filtering for each class
+                        groups = [group.dropna() for _, group in self.df.groupby(self.target_column)[feature]]
                         groups = [g for g in groups if len(g) > 0]
                         if len(groups) >= 2:
                             statistic, pvalue = f_oneway(*groups)
@@ -974,8 +974,8 @@ class TargetAnalyzer(FeatureEngineeringBase):
                             })
                     else:
                         # ANOVA F-test for categorical feature vs numeric target
-                        groups = [self.df[self.df[feature] == cat][self.target_column].dropna()
-                                  for cat in self.df[feature].unique()]
+                        # Optimized: use groupby instead of filtering for each category
+                        groups = [group.dropna() for _, group in self.df.groupby(feature)[self.target_column]]
                         groups = [g for g in groups if len(g) > 0]
                         if len(groups) >= 2:
                             statistic, pvalue = f_oneway(*groups)
@@ -1015,24 +1015,36 @@ class TargetAnalyzer(FeatureEngineeringBase):
             feature_columns = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=True)
 
         results = {}
-        classes = sorted(self.df[self.target_column].dropna().unique())
+
+        # Optimize with single groupby operation (avoid N+1 query pattern)
+        grouped = self.df.groupby(self.target_column)
 
         for feature in feature_columns:
             if feature == self.target_column:
                 continue
 
+            # Compute all statistics at once using groupby
+            stats_df = grouped[feature].agg([
+                ('count', 'count'),
+                ('mean', 'mean'),
+                ('median', lambda x: x.quantile(0.5)),
+                ('std', 'std'),
+                ('min', 'min'),
+                ('max', 'max')
+            ])
+
+            # Convert to list of dicts matching expected format
             class_stats = []
-            for cls in classes:
-                class_data = self.df[self.df[self.target_column] == cls][feature].dropna()
-                if len(class_data) > 0:
+            for cls, row in stats_df.iterrows():
+                if row['count'] > 0:
                     class_stats.append({
                         'class': cls,
-                        'count': len(class_data),
-                        'mean': class_data.mean(),
-                        'median': class_data.median(),
-                        'std': class_data.std(),
-                        'min': class_data.min(),
-                        'max': class_data.max()
+                        'count': int(row['count']),
+                        'mean': row['mean'],
+                        'median': row['median'],
+                        'std': row['std'],
+                        'min': row['min'],
+                        'max': row['max']
                     })
 
             if class_stats:

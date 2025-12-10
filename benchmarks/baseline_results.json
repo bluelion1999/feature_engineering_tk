@@ -1,51 +1,51 @@
 {
   "DataPreprocessor.__init__ (1K rows)": {
     "name": "DataPreprocessor.__init__ (1K rows)",
-    "avg_time": 5.0733331590890884e-05,
-    "std_time": 1.2445700489796402e-05,
-    "min_time": 3.749999450519681e-05,
-    "max_time": 6.739998934790492e-05
+    "avg_time": 5.223334301263094e-05,
+    "std_time": 1.4257016739820107e-05,
+    "min_time": 3.6299985367804766e-05,
+    "max_time": 7.090001599863172e-05
   },
   "DataPreprocessor.__init__ (100K rows)": {
     "name": "DataPreprocessor.__init__ (100K rows)",
-    "avg_time": 0.02017713334256162,
-    "std_time": 0.004382624000862618,
-    "min_time": 0.013979199982713908,
-    "max_time": 0.02329360001021996
+    "avg_time": 0.024436833317546796,
+    "std_time": 0.004888382461631926,
+    "min_time": 0.017901199986226857,
+    "max_time": 0.029656199971213937
   },
   "DataPreprocessor.__init__ (1M rows)": {
     "name": "DataPreprocessor.__init__ (1M rows)",
-    "avg_time": 0.22961366669430086,
-    "std_time": 0.05175153916513733,
-    "min_time": 0.15829170000506565,
-    "max_time": 0.2794949000235647
+    "avg_time": 0.25530740001704544,
+    "std_time": 0.05737893895057353,
+    "min_time": 0.17438050004420802,
+    "max_time": 0.30093239998677745
   },
   "get_string_columns (12 columns)": {
     "name": "get_string_columns (12 columns)",
-    "avg_time": 3.273333034788569e-05,
-    "std_time": 3.1094801313602872e-06,
-    "min_time": 3.0099996365606785e-05,
-    "max_time": 3.709999145939946e-05
+    "avg_time": 3.160000778734684e-05,
+    "std_time": 4.973926620775033e-06,
+    "min_time": 2.7500034775584936e-05,
+    "max_time": 3.860000288113952e-05
   },
   "TargetAnalyzer.analyze_class_wise_statistics": {
     "name": "TargetAnalyzer.analyze_class_wise_statistics",
-    "avg_time": 0.9857930666573035,
-    "std_time": 0.005015847471364374,
-    "min_time": 0.9786996999755502,
-    "max_time": 0.9893744000000879
+    "avg_time": 0.1382776333290773,
+    "std_time": 0.01761759509038943,
+    "min_time": 0.1211708000046201,
+    "max_time": 0.1625181999988854
   },
   "handle_missing_values (mean strategy)": {
     "name": "handle_missing_values (mean strategy)",
-    "avg_time": 0.07725099998060614,
-    "std_time": 0.004428423107089012,
-    "min_time": 0.07099249999737367,
-    "max_time": 0.08057969994843006
+    "avg_time": 0.08429089997662231,
+    "std_time": 0.006023569143673613,
+    "min_time": 0.07598859997233376,
+    "max_time": 0.09009399998467416
   },
   "handle_outliers (5 columns)": {
     "name": "handle_outliers (5 columns)",
-    "avg_time": 0.11984386667609215,
-    "std_time": 0.004827139779140098,
-    "min_time": 0.11336130002746359,
-    "max_time": 0.12493829999584705
+    "avg_time": 0.14164483333782604,
+    "std_time": 0.010318353468278915,
+    "min_time": 0.13065030000871047,
+    "max_time": 0.15545130003010854
   }
 }

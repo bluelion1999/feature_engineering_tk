@@ -9,7 +9,8 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 ├── agents/              # Custom subagents for specialized tasks
 │   ├── 🧪 test-writer.md       # Write comprehensive pytest tests
 │   ├── 📦 release-manager.md   # Manage version bumps and releases
-│   └── 📝 doc-generator.md     # Generate comprehensive docstrings
+│   ├── 📝 doc-generator.md     # Generate comprehensive docstrings
+│   └── 👨‍🏫 teacher.md           # Onboard users and guide contributors
 ├── skills/              # Auto-activating capabilities
 │   └── 🔍 code-review/
 │       └── SKILL.md         # Automatic code quality review
@@ -24,6 +25,7 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 | **test-writer** | 🧪 | Write pytest tests | Adding features, fixing bugs |
 | **release-manager** | 📦 | Manage releases | Version bumps, releases |
 | **doc-generator** | 📝 | Generate docs & homogenize | Documenting, version audits |
+| **teacher** | 👨‍🏫 | Teach usage & guide contributors | Onboarding, learning, contributing |
 | **code-review** | 🔍 | Quality review | Auto-activates on edits |
 
 ## Color Coding System
@@ -33,6 +35,7 @@ Each agent and skill has a unique visual identifier for quick recognition:
 - 🧪 **Purple/Testing** - test-writer: Testing and quality assurance
 - 📦 **Blue/Package** - release-manager: Versioning and deployment
 - 📝 **Green/Documentation** - doc-generator: API documentation
+- 👨‍🏫 **Orange/Teaching** - teacher: User onboarding and contributor guidance
 - 🔍 **Yellow/Review** - code-review: Proactive code quality
 
 These icons appear throughout the documentation for easy visual scanning.
@@ -115,6 +118,39 @@ These icons appear throughout the documentation for easy visual scanning.
 - **5-file version validation**: setup.py, __init__.py, README.md, CHANGELOG.md, pyproject.toml
 - **No MLToolkit references**: Enforces "Feature Engineering Toolkit" naming
 
+### 👨‍🏫 teacher (Learning & Contribution Guide)
+
+**Purpose**: Teach users how to use the package and guide developers on how to contribute
+
+**Invoke with**:
+- "How do I use this package?"
+- "Explain how DataPreprocessor works"
+- "What should I contribute to?"
+- "Show me how to add a new feature"
+- "I'm new here, where should I start?"
+
+**What it does**:
+- **For Users**: Provides tutorials, examples, and learning paths
+- **For Developers**: Explains architecture and identifies contribution opportunities
+- Teaches the 5 core classes (DataPreprocessor, FeatureEngineer, DataAnalyzer, TargetAnalyzer, FeatureSelector)
+- Explains key concepts (inplace pattern, method chaining, workflows)
+- Shows common use cases with complete code examples
+- Identifies good first issues based on skill level and interests
+- Guides through contribution workflow (setup → implement → test → PR)
+
+**Key features**:
+- **Progressive learning**: Beginner → Intermediate → Advanced paths
+- **Contribution matching**: Suggests work based on interests and skill level
+- **Complete examples**: All code is runnable and practical
+- **Skill-based guidance**: Different paths for documentation, testing, features, performance
+- **Opportunity identification**: Points to specific files and methods needing work
+- **Onboarding focus**: Makes learning and contributing feel accessible
+
+**Contribution categories**:
+- 🟢 **Beginner**: Documentation, tests, error messages, simple methods
+- 🟡 **Intermediate**: Performance optimization, new features, visualizations
+- 🔴 **Advanced**: Pipeline integration, streaming data, AutoML, GPU acceleration
+
 ## Auto-Activating Skill
 
 ### 🔍 code-review (Proactive Quality Guardian)
@@ -186,6 +222,29 @@ These icons appear throughout the documentation for easy visual scanning.
 
 # Project name validation (NEW)
 "Make sure no files reference MLToolkit instead of Feature Engineering Toolkit."
+```
+
+### 👨‍🏫 Learn & Contribute
+
+```bash
+# For new users - learning how to use the package
+"How do I use this package?"
+"Explain how DataPreprocessor works with examples"
+"Show me how to prepare data for machine learning"
+
+# For beginners - understanding concepts
+"What's the inplace pattern and when should I use it?"
+"Explain method chaining in this library"
+
+# For contributors - finding where to help
+"What should I contribute to?"
+"I'm a Python beginner, where can I help?"
+"Show me good first issues for intermediate developers"
+
+# For contributors - learning how to contribute
+"How do I add a new feature?"
+"Explain the codebase architecture"
+"What are the contribution guidelines?"
 ```
 
 ### 🔍 Code Review (Auto-Activates)
@@ -283,5 +342,5 @@ Edit `.claude/settings.json`:
 **Created**: 2025-12-07
 **Last Updated**: 2025-12-11
 **Feature Engineering Toolkit Version**: v2.3.0
-**Agents**: 3 (🧪 test-writer, 📦 release-manager, 📝 doc-generator)
+**Agents**: 4 (🧪 test-writer, 📦 release-manager, 📝 doc-generator, 👨‍🏫 teacher)
 **Skills**: 1 (🔍 code-review)

@@ -1,27 +1,47 @@
-# MLToolkit Claude Code Configuration
+# Feature Engineering Toolkit Claude Code Configuration
 
-This directory contains custom agents, skills, and settings for optimizing Claude Code workflows in the MLToolkit project.
+This directory contains custom agents, skills, and settings for optimizing Claude Code workflows in the Feature Engineering Toolkit project.
 
 ## Directory Structure
 
 ```
 .claude/
 ├── agents/              # Custom subagents for specialized tasks
-│   ├── test-writer.md       # Write comprehensive pytest tests
-│   ├── release-manager.md   # Manage version bumps and releases
-│   └── doc-generator.md     # Generate comprehensive docstrings
+│   ├── 🧪 test-writer.md       # Write comprehensive pytest tests
+│   ├── 📦 release-manager.md   # Manage version bumps and releases
+│   └── 📝 doc-generator.md     # Generate comprehensive docstrings
 ├── skills/              # Auto-activating capabilities
-│   └── code-review/
+│   └── 🔍 code-review/
 │       └── SKILL.md         # Automatic code quality review
 ├── settings.json        # Project settings and permissions
 └── README.md           # This file
 ```
 
+## Quick Reference Guide
+
+| Agent/Skill | Icon | Purpose | When to Use |
+|-------------|------|---------|-------------|
+| **test-writer** | 🧪 | Write pytest tests | Adding features, fixing bugs |
+| **release-manager** | 📦 | Manage releases | Version bumps, releases |
+| **doc-generator** | 📝 | Generate docs & homogenize | Documenting, version audits |
+| **code-review** | 🔍 | Quality review | Auto-activates on edits |
+
+## Color Coding System
+
+Each agent and skill has a unique visual identifier for quick recognition:
+
+- 🧪 **Purple/Testing** - test-writer: Testing and quality assurance
+- 📦 **Blue/Package** - release-manager: Versioning and deployment
+- 📝 **Green/Documentation** - doc-generator: API documentation
+- 🔍 **Yellow/Review** - code-review: Proactive code quality
+
+These icons appear throughout the documentation for easy visual scanning.
+
 ## Custom Agents
 
-### 1. test-writer
+### 🧪 test-writer (Testing & Quality Assurance)
 
-**Purpose**: Write comprehensive pytest tests following MLToolkit patterns
+**Purpose**: Write comprehensive pytest tests following Feature Engineering Toolkit patterns
 
 **Invoke with**:
 - "Write tests for this method"
@@ -37,12 +57,12 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 - Ensures 182+ test baseline maintained
 
 **Key features**:
-- Understands MLToolkit test patterns from CLAUDE.md
+- Understands Feature Engineering Toolkit test patterns from CLAUDE.md
 - Groups tests in classes by functionality
 - Uses descriptive test names: `test_<method>_<scenario>`
 - Validates with pytest after writing
 
-### 2. release-manager
+### 📦 release-manager (Release & Version Control)
 
 **Purpose**: Manage version bumps, CHANGELOG updates, and release preparation
 
@@ -65,31 +85,39 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 - Quality gates: tests passing, version consistency, CHANGELOG completeness
 - Handles hotfixes and pre-releases (alpha/beta/rc)
 
-### 3. doc-generator
+### 📝 doc-generator (Documentation & API Reference)
 
-**Purpose**: Generate comprehensive docstrings following Google Style
+**Purpose**: Generate comprehensive docstrings and homogenize ALL project documentation
 
 **Invoke with**:
 - "Document this method"
-- "Add docstrings to these functions"
+- "Homogenize all documentation"
+- "Check for version consistency across docs"
 - "Use the doc-generator agent to improve documentation"
 
 **What it does**:
 - Writes Google-style docstrings with Args/Returns/Raises/Example sections
 - Documents inplace parameter behavior clearly
-- Uses MLToolkit custom exceptions
+- Uses Feature Engineering Toolkit custom exceptions
 - Adds realistic, runnable examples
 - Ensures type hints in signature (not docstring)
+- **NEW**: Ensures version consistency across ALL files (v2.3.0)
+- **NEW**: Validates project name consistency ("Feature Engineering Toolkit")
+- **NEW**: Homogenizes formatting across README, CLAUDE.md, CHANGELOG
+- **NEW**: Cross-validates documentation references
 
 **Key features**:
 - Understands v2.0.0+ inplace pattern documentation requirements
 - Knows which methods need Example sections (API Reference methods)
 - Uses imperative mood for brief descriptions
 - Matches existing docstring style in codebase
+- **Proactive homogenization**: Watches for version/naming inconsistencies
+- **5-file version validation**: setup.py, __init__.py, README.md, CHANGELOG.md, pyproject.toml
+- **No MLToolkit references**: Enforces "Feature Engineering Toolkit" naming
 
 ## Auto-Activating Skill
 
-### code-review
+### 🔍 code-review (Proactive Quality Guardian)
 
 **Purpose**: Automatically review code for quality standards
 
@@ -112,7 +140,7 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 ## Project Settings
 
 `settings.json` configures:
-- **Model**: Sonnet (default for MLToolkit)
+- **Model**: Sonnet (default for Feature Engineering Toolkit)
 - **Permissions**:
   - ✅ Allowed: Read, Write, Edit, Bash, Grep, Glob
   - ❌ Denied: rm -rf, git push --force, .env access
@@ -121,7 +149,7 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 
 ## Usage Examples
 
-### Write Tests for a New Method
+### 🧪 Write Tests for a New Method
 
 ```bash
 # Automatic invocation (Claude recognizes the task)
@@ -131,7 +159,7 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 "Use the test-writer agent to create tests for the validate_data_quality() method."
 ```
 
-### Prepare a Release
+### 📦 Prepare a Release
 
 ```bash
 # Minor release (new features)
@@ -141,7 +169,7 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 "Use the release-manager agent to create a patch release v2.2.1 for the bug fixes."
 ```
 
-### Generate Documentation
+### 📝 Generate Documentation
 
 ```bash
 # Single method
@@ -149,16 +177,25 @@ This directory contains custom agents, skills, and settings for optimizing Claud
 
 # Multiple methods
 "Use the doc-generator agent to add comprehensive docstrings to all methods in the StringPreprocessing class."
+
+# Homogenize all documentation (NEW)
+"Homogenize all documentation - check version consistency and project naming."
+
+# Version audit (NEW)
+"Check if all files use v2.3.0 consistently."
+
+# Project name validation (NEW)
+"Make sure no files reference MLToolkit instead of Feature Engineering Toolkit."
 ```
 
-### Code Review (Auto-Activates)
+### 🔍 Code Review (Auto-Activates)
 
 ```bash
 # The code-review skill automatically activates when you're editing code
 # No explicit invocation needed - it watches for code changes
 
 # Or request explicitly:
-"Review this code against MLToolkit standards."
+"Review this code against Feature Engineering Toolkit standards."
 ```
 
 ## Integration with CLAUDE.md
@@ -244,6 +281,7 @@ Edit `.claude/settings.json`:
 ---
 
 **Created**: 2025-12-07
-**MLToolkit Version**: v2.2.0
-**Agents**: 3 (test-writer, release-manager, doc-generator)
-**Skills**: 1 (code-review)
+**Last Updated**: 2025-12-11
+**Feature Engineering Toolkit Version**: v2.3.0
+**Agents**: 3 (🧪 test-writer, 📦 release-manager, 📝 doc-generator)
+**Skills**: 1 (🔍 code-review)

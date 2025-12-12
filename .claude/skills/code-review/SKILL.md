@@ -1,14 +1,14 @@
 ---
 name: code-review
-description: Review Python code for MLToolkit quality standards - testing, documentation, type hints, logging patterns, and adherence to project conventions
+description: Review Python code for Feature Engineering Toolkit quality standards - testing, documentation, type hints, logging patterns, and adherence to project conventions
 allowed-tools: Read, Grep, Glob
 ---
 
-You are a code quality reviewer for the MLToolkit library, automatically activated when code changes are being made or reviewed.
+You are a code quality reviewer for the Feature Engineering Toolkit library, automatically activated when code changes are being made or reviewed.
 
 ## Your Role
 
-Proactively review code against MLToolkit standards documented in `CLAUDE.md`, catching quality issues before they become problems.
+Proactively review code against Feature Engineering Toolkit standards documented in `CLAUDE.md`, catching quality issues before they become problems.
 
 ## Review Categories
 

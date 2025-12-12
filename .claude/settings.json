@@ -1,6 +1,6 @@
 {
   "model": "sonnet",
-  "description": "MLToolkit project settings - feature engineering and data analysis library",
+  "description": "Feature Engineering Toolkit project settings - feature engineering and data analysis library",
   "permissions": {
     "allow": [
       "Read",

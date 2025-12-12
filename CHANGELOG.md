@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2025-12-10
+
+### Added
+
+- **Architecture Refactoring** - Major internal improvements for better maintainability
+  - **FeatureEngineeringBase Class**: New base class for all toolkit classes
+    - Shared `__init__()` method with DataFrame validation and copying
+    - Shared `get_dataframe()` method
+    - All 5 main classes (DataPreprocessor, FeatureEngineer, DataAnalyzer, TargetAnalyzer, FeatureSelector) now inherit from common base
+
+  - **Utility Functions Module (utils.py)**: Centralized validation and column selection
+    - `validate_and_copy_dataframe()`: DataFrame validation and copying
+    - `validate_columns()`: Column existence validation with options
+    - `get_numeric_columns()`: Extract numeric columns from DataFrame
+    - `validate_numeric_columns()`: Validate and filter numeric columns
+    - `get_string_columns()`: Extract string/object columns
+    - `get_feature_columns()`: Get feature columns with exclusions
+    - Eliminates ~250 lines of duplicate validation code across modules
+
+  - **@inplace_transform Decorator**: Available for future method simplification
+
+- **Benchmarking Infrastructure**
+  - New `benchmarks/` directory with comprehensive benchmark suite
+  - `benchmark_suite.py`: Performance testing for critical operations
+  - `baseline_results.json`: Baseline performance measurements
+  - `OPTIMIZATION_PLAN.md`: Detailed optimization strategy and results
+
+### Changed
+
+- **Performance Optimizations** - Significant speed improvements across the library
+  - **Class-wise statistics 7x faster** (969ms → 138ms, 86% improvement)
+    - Replaced nested filtering loops with single `groupby` operations
+    - Eliminates N+1 query pattern in TargetAnalyzer
+
+  - **Outlier detection 45% faster** (221ms → 120ms)
+    - Accumulate rows to remove instead of removing in loop
+    - Eliminates index alignment issues
+    - Single removal operation at end
+
+  - **Pre-computed aggregations**: Mean/median calculations optimized for large datasets
+  - **Optimized string validation**: Set-based column existence checks
+
+- **Code Reduction** - ~300 lines of redundant code eliminated (6.5% of codebase)
+  - Single source of truth for validation operations
+  - Consistent validation patterns across all classes
+  - Outlier detection consolidated (DataPreprocessor delegates to DataAnalyzer)
+
+### Improved
+
+- **Code Quality**
+  - Better separation of concerns (shared utilities vs domain logic)
+  - Improved maintainability (changes to validation made once)
+  - Cleaner, more organized codebase structure
+  - All 182 tests passing - 100% backward compatibility maintained
+
+- **Documentation**
+  - Updated CLAUDE.md with refactoring details
+  - Added OPTIMIZATION_PLAN.md with performance benchmarks
+  - Comprehensive documentation of new architecture
+
+### Technical Details
+
+**Files Added**:
+- `feature_engineering_tk/base.py`: Base class and decorators
+- `feature_engineering_tk/utils.py`: Shared utility functions
+- `benchmarks/benchmark_suite.py`: Benchmark infrastructure
+- `benchmarks/__init__.py`: Package initialization
+- `OPTIMIZATION_PLAN.md`: Optimization documentation
+
+**Files Modified**:
+- `feature_engineering_tk/preprocessing.py`: Uses base class and utilities, optimized outlier detection
+- `feature_engineering_tk/feature_engineering.py`: Uses base class and utilities
+- `feature_engineering_tk/data_analysis.py`: Uses base class and utilities, optimized N+1 patterns
+- `feature_engineering_tk/feature_selection.py`: Uses base class and utilities
+
+**Benefits**:
+- Significantly faster statistical analysis (7x improvement for class-wise statistics)
+- Improved code maintainability and consistency
+- Single source of truth for validation logic
+- Better performance for large datasets
+- Cleaner architecture with clear separation of concerns
+
+All 182 tests pass successfully.
+
 ## [2.2.0] - 2025-12-07
 
 ### Added
@@ -339,13 +423,15 @@ All 131 tests pass successfully. Changes maintain backward compatibility.
 
 ### Added
 
-- Initial release of MLToolkit
+- Initial release of Feature Engineering Toolkit
 - `DataAnalyzer` - Exploratory data analysis and visualization
 - `DataPreprocessor` - Data cleaning and preprocessing
 - `FeatureEngineer` - Feature transformation and creation
 - `FeatureSelector` - Feature selection methods
 - Basic documentation and examples
 
+[2.3.0]: https://github.com/bluelion1999/feature_engineering_tk/compare/v2.2.0...v2.3.0
+[2.2.0]: https://github.com/bluelion1999/feature_engineering_tk/compare/v2.1.1...v2.2.0
 [2.1.1]: https://github.com/bluelion1999/feature_engineering_tk/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/bluelion1999/feature_engineering_tk/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/bluelion1999/feature_engineering_tk/compare/v1.0.0...v2.0.0

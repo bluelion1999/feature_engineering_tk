@@ -52,7 +52,7 @@
 - Single source of truth for validation operations
 - Significantly faster statistical analysis (7x improvement)
 - Improved code maintainability and consistency
-- 100% backward compatibility (all 182 tests passing)
+- 100% backward compatibility (all 204 tests passing)
 - Cleaner, more organized codebase
 
 **Technical Details**: See "Redundancy Reduction Refactoring (2025-12-09)" and "Performance Optimizations (2025-12-10)" sections below for complete details.
@@ -186,9 +186,9 @@
 - **Single Source of Truth**: Validation logic centralized in utils.py
 - **Consistency**: All classes use identical validation patterns
 - **Maintainability**: Changes to validation need only be made once
-- **Testing**: Utility functions can be tested independently
+- **Testing**: Utility functions can be tested independently (22 dedicated tests in v2.3.0)
 - **Outlier Detection**: DataPreprocessor delegates to DataAnalyzer (DRY principle)
-- **All 182 tests passing**: 100% backward compatibility maintained
+- **All 204 tests passing**: 100% backward compatibility maintained
 
 ### Architecture Refactoring (2025-11-24)
 1. **VIF Relocation**: Moved `calculate_vif()` from TargetAnalyzer to DataAnalyzer
@@ -231,13 +231,14 @@ mltoolkit/
 │   ├── preprocessing.py       # Data cleaning
 │   ├── feature_selection.py   # Feature selection
 │   └── exceptions.py          # Custom exceptions
-├── tests/                     # Test suite (131 tests)
+├── tests/                     # Test suite (204 tests)
 │   ├── test_preprocessing.py
 │   ├── test_feature_engineering.py
 │   ├── test_data_analysis.py
-│   ├── test_target_analyzer.py  # NEW: Phase 1 TargetAnalyzer tests
+│   ├── test_target_analyzer.py
 │   ├── test_exceptions.py
-│   └── test_plotting.py
+│   ├── test_plotting.py
+│   └── test_base_and_utils.py  # NEW v2.3.0: Base class and utility tests
 ├── setup.py
 ├── README.md
 └── claude.md                  # This file
@@ -632,7 +633,7 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 
 ## Testing
 
-**182 tests** across 6 test files:
+**204 tests** across 7 test files:
 - `test_preprocessing.py`: 53 tests
   - 11 core tests (inplace bugs, deprecated methods, div-by-zero)
   - 7 string preprocessing tests (v2.2.0)
@@ -645,6 +646,9 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 - `test_target_analyzer.py`: 87 tests (Phases 1-5,7-8: task detection, statistical tests, correlations, MI, VIF delegation, data quality, recommendations, report generation, feature engineering suggestions, model recommendations, integration tests)
 - `test_exceptions.py`: 4 tests (custom exception messages)
 - `test_plotting.py`: 8 tests (figure returns, save capability)
+- `test_base_and_utils.py`: 22 tests (**NEW v2.3.0**: base class and utility functions)
+  - 4 tests for FeatureEngineeringBase (initialization, copy behavior, invalid input, get_dataframe)
+  - 18 tests for utility functions (validate_and_copy_dataframe, validate_columns, get_numeric_columns, validate_numeric_columns, get_string_columns, get_feature_columns)
 
 **Run tests**:
 ```bash
@@ -846,7 +850,7 @@ DataFrame init (1M rows)            231ms     255ms    Within variance
 ```
 
 ### Testing
-- All 182 tests passing ✅
+- All 204 tests passing ✅
 - 100% backward compatibility maintained
 - No API changes required
 

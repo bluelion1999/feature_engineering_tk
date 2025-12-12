@@ -58,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Better separation of concerns (shared utilities vs domain logic)
   - Improved maintainability (changes to validation made once)
   - Cleaner, more organized codebase structure
-  - All 182 tests passing - 100% backward compatibility maintained
+  - All 204 tests passing - 100% backward compatibility maintained
 
 - **Documentation**
   - Updated CLAUDE.md with refactoring details
@@ -87,7 +87,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Better performance for large datasets
 - Cleaner architecture with clear separation of concerns
 
-All 182 tests pass successfully.
+### Tests
+
+- Added 22 tests for base class and utility functions (`test_base_and_utils.py`)
+  - 4 tests for FeatureEngineeringBase class
+  - 18 tests for utility functions
+- Now 204 total tests across all modules
+
+All 204 tests pass successfully.
 
 ## [2.2.0] - 2025-12-07
 

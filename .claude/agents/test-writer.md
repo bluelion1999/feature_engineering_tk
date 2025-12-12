@@ -143,7 +143,7 @@ When asked to write tests:
 
 ## Test Coverage Expectations
 
-- **Current total**: 182 tests across all modules
+- **Current total**: 204 tests across all modules
 - **Standard**: Each new feature should have 3-7 tests minimum
 - **Categories**:
   - Basic functionality (1-2 tests)
@@ -213,6 +213,6 @@ class TestHandleMissingValues:
 - **Always read existing tests first** to match the style
 - **Test both success and failure paths**
 - **Run tests immediately** after writing
-- **182 tests is the current baseline** - maintain or exceed
+- **204 tests is the current baseline** - maintain or exceed
 - Refer to `CLAUDE.md` for project conventions
 - Use the custom exception hierarchy from `exceptions.py`

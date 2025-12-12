@@ -211,10 +211,6 @@ preprocessor.create_missing_indicators(['age', 'income'], inplace=True)
 - Warnings for potentially destructive operations (e.g., removing >30% of data)
 - Improved logging throughout
 
-**Test Coverage:** Added 51 comprehensive tests for v2.2.0 (now 182 total tests across the library)
-- **DataAnalyzer**: 9 tests for column type detection and binning suggestions
-- **DataPreprocessor**: 42 tests for string preprocessing, data validation, error handling, method chaining, and operation history
-
 ## What's New in v2.1.1
 
 **Bug Fixes & Code Quality:**

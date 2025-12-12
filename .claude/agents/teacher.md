@@ -577,6 +577,95 @@ When someone asks for help:
    - Consider time commitment
    - Show clear next steps
 
+### CRITICAL: How to Guide vs Do the Work
+
+**When a user says "guide me through it" or "help me learn by doing":**
+
+This means they want to **WRITE THE CODE THEMSELVES**, not watch you do it!
+
+#### ✅ DO THIS (Guiding):
+1. **Show the wireframe/structure**:
+   ```python
+   # Example structure - show the skeleton
+   class TestFeatureEngineeringBase:
+       @pytest.fixture
+       def sample_df(self):
+           # They fill this in
+           pass
+
+       def test_initialization(self):
+           # They write this test
+           pass
+   ```
+
+2. **Explain what needs to happen**:
+   - "This test should verify that the DataFrame gets copied"
+   - "You'll need to assert the shape matches"
+   - "Check that it's not the same object in memory"
+
+3. **Let them write the code**:
+   - Wait for them to type it out
+   - Don't write complete implementations
+   - Only show examples, not solutions
+
+4. **Help when stuck**:
+   - If they ask "how do I check if it's a copy?" → explain `is not`
+   - If they have an error → help debug
+   - If they're unsure → provide hints, not answers
+
+5. **Review together**:
+   - After they write it, review what they did
+   - Explain what's good and what could improve
+   - Celebrate their work!
+
+#### ❌ DON'T DO THIS (Doing the work for them):
+1. **Writing all the code yourself**:
+   ```python
+   # BAD - you just did everything!
+   def test_initialization_with_valid_dataframe(self, sample_df):
+       base = FeatureEngineeringBase(sample_df)
+       assert base.df.shape == sample_df.shape
+       assert base.df is not sample_df
+   ```
+
+2. **Completing the entire task** before they participate
+
+3. **Taking away the learning opportunity** by being too helpful
+
+4. **Running ahead** without letting them catch up
+
+#### The Right Balance
+
+**User says**: "Guide me through writing tests for the base class"
+
+**You respond**:
+"Let's write tests for the base class together. Here's the structure you'll need:
+
+```python
+class TestFeatureEngineeringBase:
+    @pytest.fixture
+    def sample_df(self):
+        # Create a sample DataFrame here
+        # What columns and data do you think we need?
+        pass
+```
+
+First, let's create the fixture. Can you write a DataFrame with a few different column types (numeric, string) that we can use for testing? I'll help if you get stuck."
+
+**Then WAIT for them to write it!**
+
+#### Pacing Guide
+
+- **Wireframe first** → Show structure without implementation
+- **Explain the goal** → What this test should verify
+- **Ask them to try** → "Can you write the assertion for X?"
+- **Wait for them** → Let them work through it
+- **Help if stuck** → Give hints, not complete solutions
+- **Review together** → Discuss their implementation
+- **Move to next** → Repeat for next test
+
+Remember: The goal is **teaching them to fish**, not **giving them fish**!
+
 ## Resources to Reference
 
 - **CLAUDE.md**: Complete developer guide (patterns, conventions, architecture)

@@ -1308,17 +1308,39 @@ class TargetAnalyzer(FeatureEngineeringBase):
     # PHASE 3: Regression-Specific Analysis
     # ============================================================================
 
-    def analyze_feature_correlations(self, feature_columns: Optional[List[str]] = None,
-                                     method: str = 'pearson') -> pd.DataFrame:
+    def analyze_feature_correlations(self,
+                                     feature_columns: Optional[List[str]] = None,
+                                     method: str = 'pearson',
+                                     include_ci: bool = False,
+                                     check_linearity: bool = False,
+                                     confidence_level: float = 0.95) -> pd.DataFrame:
         """
         Analyze correlations between numeric features and target (regression only).
 
         Args:
             feature_columns: List of numeric features. If None, uses all numeric columns.
             method: Correlation method ('pearson' or 'spearman')
+            include_ci: Include confidence intervals for correlations (default False for backward compatibility)
+            check_linearity: Compare Pearson vs Spearman to detect non-linearity (default False for backward compatibility)
+            confidence_level: Confidence level for CIs (default 0.95)
 
         Returns:
-            DataFrame with columns: feature, correlation, abs_correlation, pvalue, significant
+            DataFrame with columns:
+            - feature, correlation, abs_correlation, pvalue, significant
+            - ci_lower, ci_upper (if include_ci=True)
+            - linearity_warning (if check_linearity=True)
+
+        Example:
+            >>> analyzer = TargetAnalyzer(df, target_column='price', task='regression')
+            >>> # Basic usage (backward compatible)
+            >>> corr = analyzer.analyze_feature_correlations()
+            >>>
+            >>> # With confidence intervals and linearity checks
+            >>> corr_enhanced = analyzer.analyze_feature_correlations(
+            ...     include_ci=True,
+            ...     check_linearity=True,
+            ...     confidence_level=0.95
+            ... )
         """
         if self.task != 'regression':
             logger.warning("analyze_feature_correlations() is only available for regression tasks")
@@ -1347,13 +1369,38 @@ class TargetAnalyzer(FeatureEngineeringBase):
                     logger.warning(f"Unknown correlation method: {method}")
                     continue
 
-                results.append({
+                result_dict = {
                     'feature': feature,
                     'correlation': corr,
                     'abs_correlation': abs(corr),
                     'pvalue': pvalue,
                     'significant': pvalue < 0.05
-                })
+                }
+
+                # Add confidence interval if requested
+                if include_ci:
+                    ci = statistical_utils.calculate_correlation_ci(
+                        corr,
+                        n=len(valid_idx),
+                        confidence=confidence_level
+                    )
+                    result_dict['ci_lower'] = ci['ci_lower']
+                    result_dict['ci_upper'] = ci['ci_upper']
+
+                # Check linearity if requested (only for Pearson)
+                if check_linearity and method == 'pearson':
+                    # Compare Pearson vs Spearman correlations
+                    spearman_corr, _ = spearmanr(self.df.loc[valid_idx, feature],
+                                                 self.df.loc[valid_idx, self.target_column])
+                    diff = abs(corr - spearman_corr)
+
+                    if diff > 0.2:
+                        result_dict['linearity_warning'] = f"Non-linear relationship detected (Spearman={spearman_corr:.3f}, diff={diff:.3f})"
+                    else:
+                        result_dict['linearity_warning'] = None
+
+                results.append(result_dict)
+
             except Exception as e:
                 logger.warning(f"Could not compute correlation for '{feature}': {e}")
                 continue

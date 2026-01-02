@@ -1145,15 +1145,32 @@ class TargetAnalyzer(FeatureEngineeringBase):
 
         return df_results
 
-    def analyze_class_wise_statistics(self, feature_columns: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
+    def analyze_class_wise_statistics(self,
+                                      feature_columns: Optional[List[str]] = None,
+                                      confidence_level: float = 0.95,
+                                      include_ci: bool = False) -> Dict[str, pd.DataFrame]:
         """
         Compute statistics for each feature broken down by target class (classification only).
 
         Args:
             feature_columns: List of numeric feature columns. If None, uses all numeric columns.
+            confidence_level: Confidence level for CIs (default 0.95)
+            include_ci: Include confidence intervals for mean and median (default False for backward compatibility)
 
         Returns:
-            Dict mapping feature names to DataFrames with class-wise statistics
+            Dict mapping feature names to DataFrames with class-wise statistics.
+            If include_ci=True, includes mean_ci_lower, mean_ci_upper, median_ci_lower, median_ci_upper columns.
+
+        Example:
+            >>> analyzer = TargetAnalyzer(df, target_column='species')
+            >>> # Basic usage (backward compatible)
+            >>> stats = analyzer.analyze_class_wise_statistics()
+            >>>
+            >>> # With confidence intervals
+            >>> stats_with_ci = analyzer.analyze_class_wise_statistics(
+            ...     confidence_level=0.95,
+            ...     include_ci=True
+            ... )
         """
         if self.task != 'classification':
             logger.warning("analyze_class_wise_statistics() is only available for classification tasks")
@@ -1181,11 +1198,43 @@ class TargetAnalyzer(FeatureEngineeringBase):
                 ('max', 'max')
             ])
 
+            # Add confidence intervals if requested
+            if include_ci:
+                mean_ci_lower = []
+                mean_ci_upper = []
+                median_ci_lower = []
+                median_ci_upper = []
+
+                for cls in stats_df.index:
+                    class_data = self.df[self.df[self.target_column] == cls][feature].dropna()
+
+                    # Mean CI (parametric)
+                    mean_ci = statistical_utils.calculate_mean_ci(class_data, confidence=confidence_level)
+                    mean_ci_lower.append(mean_ci['ci_lower'])
+                    mean_ci_upper.append(mean_ci['ci_upper'])
+
+                    # Median CI (bootstrap)
+                    median_ci = statistical_utils.bootstrap_ci(
+                        class_data.values,
+                        statistic_func=np.median,
+                        n_bootstrap=1000,
+                        confidence=confidence_level,
+                        random_state=42
+                    )
+                    median_ci_lower.append(median_ci['ci_lower'])
+                    median_ci_upper.append(median_ci['ci_upper'])
+
+                # Add CI columns to stats_df
+                stats_df['mean_ci_lower'] = mean_ci_lower
+                stats_df['mean_ci_upper'] = mean_ci_upper
+                stats_df['median_ci_lower'] = median_ci_lower
+                stats_df['median_ci_upper'] = median_ci_upper
+
             # Convert to list of dicts matching expected format
             class_stats = []
             for cls, row in stats_df.iterrows():
                 if row['count'] > 0:
-                    class_stats.append({
+                    stat_dict = {
                         'class': cls,
                         'count': int(row['count']),
                         'mean': row['mean'],
@@ -1193,7 +1242,16 @@ class TargetAnalyzer(FeatureEngineeringBase):
                         'std': row['std'],
                         'min': row['min'],
                         'max': row['max']
-                    })
+                    }
+
+                    # Add CI columns if they exist
+                    if include_ci:
+                        stat_dict['mean_ci_lower'] = row['mean_ci_lower']
+                        stat_dict['mean_ci_upper'] = row['mean_ci_upper']
+                        stat_dict['median_ci_lower'] = row['median_ci_lower']
+                        stat_dict['median_ci_upper'] = row['median_ci_upper']
+
+                    class_stats.append(stat_dict)
 
             if class_stats:
                 results[feature] = pd.DataFrame(class_stats)

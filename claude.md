@@ -9,12 +9,38 @@
 - **Repository**: https://github.com/bluelion1999/feature_engineering_tk
 - **Default Branch**: master
 - **Python Version**: 3.8+
-- **Current Version**: 2.3.0
-- **Last Major Refactor**: 2025-12-09 (Redundancy Reduction)
+- **Current Version**: 2.4.0
+- **Last Major Enhancement**: 2026-01-02 (Statistical Robustness)
 
 ---
 
 ## Recent Major Changes
+
+### Version 2.4.0 Release (2026-01-02)
+**Status**: Completed on feature/statistical-robustness branch
+**Focus**: Statistical robustness and validity enhancements
+
+#### New Statistical Utilities Module
+- Added `statistical_utils.py` with 11 comprehensive functions
+- Assumption validation (normality, homogeneity, sample size, chi-square)
+- Effect size calculations (Cohen's d, η², Cramér's V)
+- Multiple testing corrections (Benjamini-Hochberg FDR, Bonferroni)
+- Confidence interval utilities (parametric, Fisher Z, bootstrap)
+
+#### Enhanced TargetAnalyzer Methods
+- `analyze_feature_target_relationship()`: Assumption validation, effect sizes, multiple testing correction
+- `analyze_class_wise_statistics()`: Confidence intervals for means and medians
+- `analyze_feature_correlations()`: Correlation CIs and linearity detection
+- All enhancements opt-in via optional parameters (100% backward compatible)
+
+#### Testing & Documentation
+- Added 29 comprehensive tests (211 total: 182 baseline + 29 new)
+- Comprehensive README and claude.md documentation
+- Full API documentation for all statistical utilities
+
+**Benefits**: Valid statistical tests, controlled error rates, practical significance measures, uncertainty quantification
+
+---
 
 ### Version 2.3.0 Release (2025-12-10)
 **Status**: Completed on fly_catcher branch
@@ -56,84 +82,6 @@
 - Cleaner, more organized codebase
 
 **Technical Details**: See "Redundancy Reduction Refactoring (2025-12-09)" and "Performance Optimizations (2025-12-10)" sections below for complete details.
-
----
-
-### Statistical Robustness Features (2026-01-02)
-**Status**: Completed on feature/statistical-robustness branch
-**Focus**: Add comprehensive statistical robustness to ensure valid, reliable analyses
-
-#### New Module: statistical_utils.py
-
-**Assumption Validation Functions** (4 functions):
-- `check_normality()`: Shapiro-Wilk test for normality (supports large samples with subsampling)
-- `check_homogeneity_of_variance()`: Levene's test for equal variances
-- `validate_sample_size()`: Sample size requirements for different tests
-- `check_chi2_expected_frequencies()`: Expected frequency validation for chi-square
-
-**Effect Size Calculations** (4 functions):
-- `cohens_d()`: Cohen's d for t-tests with interpretation (small/medium/large)
-- `eta_squared()`: Eta-squared (η²) for ANOVA with variance explained percentage
-- `cramers_v()`: Cramér's V for chi-square tests with bias correction
-- `pearson_r_to_d()`: Convert Pearson r to Cohen's d for comparison
-
-**Multiple Testing Corrections** (1 function):
-- `apply_multiple_testing_correction()`: Benjamini-Hochberg FDR, Bonferroni, Holm methods
-
-**Confidence Interval Utilities** (3 functions):
-- `calculate_mean_ci()`: Parametric CI using t-distribution
-- `calculate_correlation_ci()`: Fisher Z-transformation for correlation CIs
-- `bootstrap_ci()`: Non-parametric bootstrap for any statistic
-
-#### Enhanced TargetAnalyzer Methods
-
-**analyze_feature_target_relationship()** - New parameters:
-- `check_assumptions=False`: Validates normality, homogeneity with automatic fallback to Kruskal-Wallis
-- `report_effect_sizes=False`: Includes eta-squared (ANOVA) or Cramér's V (chi-square)
-- `correct_multiple_tests=False`: Applies Benjamini-Hochberg FDR correction
-- `alpha=0.05`: Significance level
-
-Returns additional columns:
-- `pvalue_corrected`: FDR-corrected p-value
-- `significant_raw`, `significant_corrected`: Before/after correction significance
-- `effect_size`, `effect_interpretation`: Practical significance measures
-- `assumptions_met`: Boolean flag for assumption validity
-- `warnings`: Assumption violations or test recommendations
-
-**analyze_class_wise_statistics()** - New parameters:
-- `include_ci=False`: Adds confidence intervals for mean and median
-- `confidence_level=0.95`: CI confidence level
-
-Returns additional columns:
-- `mean_ci_lower`, `mean_ci_upper`: Parametric CIs for means
-- `median_ci_lower`, `median_ci_upper`: Bootstrap CIs for medians
-
-**analyze_feature_correlations()** - New parameters:
-- `include_ci=False`: Fisher Z-transformation CIs for correlations
-- `check_linearity=False`: Compares Pearson vs Spearman to detect non-linearity
-- `confidence_level=0.95`: CI confidence level
-
-Returns additional columns:
-- `ci_lower`, `ci_upper`: Correlation confidence intervals
-- `linearity_warning`: Flags when Pearson/Spearman differ >0.2
-
-#### Testing
-- Added 29 comprehensive tests in `test_statistical_utils.py`
-- Total: 211 tests (182 baseline + 29 new)
-- Coverage: assumption checks, effect sizes, corrections, CIs, edge cases, integration tests
-- All tests passing ✅
-
-#### Backward Compatibility
-- All enhancements use optional parameters defaulting to False
-- 100% backward compatible - existing code unchanged
-- Opt-in design allows gradual adoption
-
-#### Benefits
-- **Valid Tests**: Automatic assumption checking prevents invalid statistical conclusions
-- **Controlled Errors**: Multiple testing corrections prevent false positives (5% → <1% false discovery rate)
-- **Practical Significance**: Effect sizes distinguish meaningful vs trivial differences
-- **Uncertainty Quantification**: Confidence intervals show estimate reliability
-- **Non-parametric Fallbacks**: Automatic switch to Kruskal-Wallis when ANOVA assumptions violated
 
 ---
 

@@ -1,4 +1,4 @@
-# Feature Engineering Toolkit v2.3.0
+# Feature Engineering Toolkit v2.4.0
 
 [![PyPI version](https://badge.fury.io/py/feature-engineering-tk.svg)](https://badge.fury.io/py/feature-engineering-tk)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -30,6 +30,63 @@ pip install feature-engineering-tk
 ```
 
 **Requirements:** Python 3.8+
+
+## What's New in v2.4.0
+
+**Statistical Robustness Features:**
+
+### 📊 Statistical Validity & Confidence
+Comprehensive statistical robustness utilities ensure valid, reliable analyses:
+
+- **Assumption Validation**: Shapiro-Wilk normality tests, Levene's test for homogeneity of variance, sample size validation, chi-square expected frequency checks
+- **Effect Sizes**: Cohen's d, eta-squared (η²), Cramér's V with interpretations (small/medium/large)
+- **Multiple Testing Corrections**: Benjamini-Hochberg FDR and Bonferroni corrections to control false positives
+- **Confidence Intervals**: Parametric CIs for means, Fisher Z-transformation for correlations, bootstrap CIs for any statistic
+- **Non-parametric Fallbacks**: Automatic switch to Kruskal-Wallis when ANOVA assumptions violated
+
+Enhanced TargetAnalyzer methods with opt-in statistical rigor:
+```python
+# Feature-target relationships with full statistical validation
+relationships = analyzer.analyze_feature_target_relationship(
+    check_assumptions=True,      # Validate assumptions, auto-switch to non-parametric
+    report_effect_sizes=True,    # Include practical significance measures
+    correct_multiple_tests=True  # Apply Benjamini-Hochberg FDR correction
+)
+
+# Class-wise statistics with confidence intervals
+class_stats = analyzer.analyze_class_wise_statistics(
+    include_ci=True,          # Parametric CIs for means, bootstrap CIs for medians
+    confidence_level=0.95
+)
+
+# Correlations with CIs and linearity checks
+correlations = analyzer.analyze_feature_correlations(
+    include_ci=True,          # Fisher Z-transformation CIs
+    check_linearity=True      # Detect non-linear relationships
+)
+```
+
+**Direct access to statistical utilities:**
+```python
+from feature_engineering_tk import statistical_utils
+
+# Check assumptions
+normality = statistical_utils.check_normality(data)
+variance_check = statistical_utils.check_homogeneity_of_variance([group1, group2])
+
+# Calculate effect sizes
+effect = statistical_utils.cohens_d(group1, group2)
+
+# Apply multiple testing correction
+correction = statistical_utils.apply_multiple_testing_correction(pvalues, method='fdr_bh')
+
+# Bootstrap confidence intervals
+ci = statistical_utils.bootstrap_ci(data, statistic_func=np.median)
+```
+
+**100% backward compatible** - all enhancements are opt-in via optional parameters.
+
+---
 
 ## What's New in v2.3.0
 

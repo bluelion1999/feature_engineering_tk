@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-01-02
+
+### Added
+
+- **Statistical Robustness Utilities (statistical_utils.py)** - Comprehensive module for statistical validity and confidence
+  - **Assumption Validation Functions**:
+    - `check_normality()`: Shapiro-Wilk normality test with automatic fallback for large samples
+    - `check_homogeneity_of_variance()`: Levene's test for equal variances across groups
+    - `validate_sample_size()`: Sample size requirements validation for statistical tests
+    - `check_chi2_expected_frequencies()`: Chi-square assumption checks (expected frequencies ≥5)
+
+  - **Effect Size Calculations**:
+    - `cohens_d()`: Cohen's d effect size for t-tests with interpretation (small/medium/large)
+    - `eta_squared()`: Eta-squared (η²) effect size for ANOVA
+    - `cramers_v()`: Cramér's V effect size for chi-square tests
+    - `pearson_r_to_d()`: Convert Pearson correlation to Cohen's d
+
+  - **Multiple Testing Corrections**:
+    - `apply_multiple_testing_correction()`: Benjamini-Hochberg FDR and Bonferroni corrections
+    - Controls false positive rates when testing multiple hypotheses
+
+  - **Confidence Intervals**:
+    - `calculate_mean_ci()`: Parametric confidence intervals for means (t-distribution)
+    - `calculate_correlation_ci()`: Fisher Z-transformation for correlation confidence intervals
+    - `bootstrap_ci()`: Non-parametric bootstrap confidence intervals for any statistic
+
+- **Enhanced TargetAnalyzer Methods** - Optional statistical rigor for all statistical tests
+  - **analyze_feature_target_relationship()** enhancements:
+    - `check_assumptions=True`: Validates normality, homogeneity of variance, sample size
+    - `report_effect_sizes=True`: Includes Cohen's d, eta-squared, Cramér's V
+    - `correct_multiple_tests='fdr_bh'`: FDR or Bonferroni correction for multiple features
+    - Non-parametric fallback: Automatic Kruskal-Wallis when ANOVA assumptions violated
+
+  - **analyze_class_wise_statistics()** enhancements:
+    - `include_ci=True`: Adds 95% confidence intervals for class means
+    - `confidence_level=0.95`: Customizable confidence level (default 95%)
+
+  - **analyze_feature_correlations()** enhancements:
+    - `include_ci=True`: Fisher Z-transformation confidence intervals for correlations
+    - `check_linearity=True`: Validates linear relationship assumption
+    - `confidence_level=0.95`: Customizable confidence level (default 95%)
+
+### Changed
+
+- **TargetAnalyzer Statistical Methods** - Enhanced with opt-in statistical validation
+  - All statistical tests now support comprehensive assumption checking
+  - Effect sizes automatically calculated and interpreted when requested
+  - Multiple testing corrections applied when analyzing multiple features
+  - Non-parametric alternatives used when parametric assumptions violated
+
+### Improved
+
+- **Statistical Reliability** - Ensures valid, trustworthy statistical inferences
+  - Prevents misuse of parametric tests when assumptions violated
+  - Quantifies practical significance through effect sizes
+  - Controls false discovery rates in multiple comparisons
+  - Provides uncertainty quantification through confidence intervals
+
+- **Code Quality**
+  - New statistical_utils module with 11 well-tested utility functions
+  - Clear documentation and examples for all statistical methods
+  - All 211 tests passing - 100% backward compatibility maintained
+
+### Tests
+
+- Added 29 comprehensive tests in test_statistical_utils.py
+  - 4 tests for normality checks (normal/non-normal data, sample size handling)
+  - 3 tests for homogeneity of variance (equal/unequal variances, edge cases)
+  - 2 tests for sample size validation (sufficient/insufficient data)
+  - 2 tests for chi-square expected frequencies (valid/invalid tables)
+  - 5 tests for effect sizes (Cohen's d, eta-squared, Cramér's V, conversions)
+  - 2 tests for multiple testing corrections (FDR, Bonferroni)
+  - 5 tests for confidence intervals (mean, correlation, bootstrap with custom statistics)
+  - 3 tests for edge cases (NaN handling, zero variance, insufficient bootstrap data)
+  - 3 integration tests (ANOVA, chi-square, correlation workflows)
+
+All 211 tests pass successfully.
+
 ## [2.3.0] - 2025-12-10
 
 ### Added

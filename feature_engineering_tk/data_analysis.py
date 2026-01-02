@@ -17,6 +17,7 @@ from .utils import (
     get_numeric_columns,
     get_feature_columns
 )
+from . import statistical_utils
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -895,13 +896,18 @@ class TargetAnalyzer(FeatureEngineeringBase):
     # PHASE 2: Classification-Specific Statistical Tests
     # ============================================================================
 
-    def analyze_feature_target_relationship(self, feature_columns: Optional[List[str]] = None) -> pd.DataFrame:
+    def analyze_feature_target_relationship(self,
+                                           feature_columns: Optional[List[str]] = None,
+                                           correct_multiple_tests: bool = False,
+                                           alpha: float = 0.05,
+                                           report_effect_sizes: bool = False,
+                                           check_assumptions: bool = False) -> pd.DataFrame:
         """
         Analyze relationship between features and target using appropriate statistical tests.
 
         For classification:
         - Chi-square test for categorical features
-        - ANOVA F-test for numeric features
+        - ANOVA F-test for numeric features (with optional assumption checking)
 
         For regression:
         - Pearson correlation for numeric features
@@ -909,9 +915,29 @@ class TargetAnalyzer(FeatureEngineeringBase):
 
         Args:
             feature_columns: List of feature columns to analyze. If None, uses all columns except target.
+            correct_multiple_tests: Apply Benjamini-Hochberg FDR correction (default False for backward compatibility)
+            alpha: Significance level (default 0.05)
+            report_effect_sizes: Include effect sizes in results (default False for backward compatibility)
+            check_assumptions: Validate test assumptions and use robust alternatives if violated (default False for backward compatibility)
 
         Returns:
-            DataFrame with columns: feature, test_type, statistic, pvalue, significant (at α=0.05)
+            DataFrame with columns:
+            - feature, test_type, statistic, pvalue
+            - significant (if correct_multiple_tests=False) OR significant_raw, significant_corrected, pvalue_corrected (if True)
+            - effect_size, effect_interpretation (if report_effect_sizes=True)
+            - assumptions_met, warnings (if check_assumptions=True)
+
+        Example:
+            >>> analyzer = TargetAnalyzer(df, target_column='target')
+            >>> # Basic usage (backward compatible)
+            >>> results = analyzer.analyze_feature_target_relationship()
+            >>>
+            >>> # With statistical robustness enhancements
+            >>> results = analyzer.analyze_feature_target_relationship(
+            ...     correct_multiple_tests=True,
+            ...     report_effect_sizes=True,
+            ...     check_assumptions=True
+            ... )
         """
         if feature_columns is None:
             feature_columns = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=False)
@@ -937,75 +963,214 @@ class TargetAnalyzer(FeatureEngineeringBase):
                         # Optimized: use groupby instead of filtering for each class
                         groups = [group.dropna() for _, group in self.df.groupby(self.target_column)[feature]]
                         groups = [g for g in groups if len(g) > 0]
-                        if len(groups) >= 2:
+
+                        if len(groups) < 2:
+                            continue
+
+                        # Initialize result dict
+                        result_dict = {'feature': feature}
+                        warnings_list = []
+                        assumptions_dict = {}
+
+                        # Check assumptions if requested
+                        if check_assumptions:
+                            # Sample size validation
+                            sample_check = statistical_utils.validate_sample_size(groups, test_type='anova', min_size=30)
+                            assumptions_dict['sufficient_sample'] = sample_check['sufficient']
+                            if not sample_check['sufficient']:
+                                warnings_list.append(f"Small sample size: {sample_check['actual_sizes']}")
+
+                            # Normality check for each group
+                            normality_results = [statistical_utils.check_normality(g) for g in groups if len(g) >= 3]
+                            assumptions_dict['all_normal'] = all(r['is_normal'] for r in normality_results) if normality_results else False
+
+                            # Homogeneity of variance
+                            if len(groups) >= 2 and all(len(g) >= 2 for g in groups):
+                                variance_check = statistical_utils.check_homogeneity_of_variance(groups)
+                                assumptions_dict['equal_variances'] = variance_check['equal_variances']
+                                if not variance_check['equal_variances']:
+                                    warnings_list.append("Unequal variances detected")
+                            else:
+                                assumptions_dict['equal_variances'] = None
+
+                            # Decide which test to use based on assumptions
+                            if not assumptions_dict.get('all_normal', True):
+                                # Use Kruskal-Wallis (non-parametric alternative)
+                                statistic, pvalue = stats.kruskal(*groups)
+                                test_name = 'Kruskal-Wallis H-test'
+                                warnings_list.append("Non-normal distribution; using Kruskal-Wallis")
+                            else:
+                                # Use standard ANOVA
+                                statistic, pvalue = f_oneway(*groups)
+                                test_name = 'ANOVA F-test'
+                        else:
+                            # Default behavior (backward compatible)
                             statistic, pvalue = f_oneway(*groups)
-                            results.append({
-                                'feature': feature,
-                                'test_type': 'ANOVA F-test',
-                                'statistic': statistic,
-                                'pvalue': pvalue,
-                                'significant': pvalue < 0.05
-                            })
+                            test_name = 'ANOVA F-test'
+
+                        result_dict.update({
+                            'test_type': test_name,
+                            'statistic': statistic,
+                            'pvalue': pvalue
+                        })
+
+                        # Calculate effect size if requested
+                        if report_effect_sizes and 'ANOVA' in test_name:
+                            effect_size_result = statistical_utils.eta_squared(groups)
+                            result_dict['effect_size'] = effect_size_result['eta_squared']
+                            result_dict['effect_interpretation'] = effect_size_result['interpretation']
+
+                        # Add assumption check results if requested
+                        if check_assumptions:
+                            result_dict['assumptions_met'] = all(assumptions_dict.values()) if assumptions_dict else None
+                            result_dict['warnings'] = '; '.join(warnings_list) if warnings_list else None
+
+                        results.append(result_dict)
+
                     else:
                         # Chi-square test for categorical feature vs categorical target
                         contingency_table = pd.crosstab(self.df[feature], self.df[self.target_column])
+
+                        result_dict = {'feature': feature}
+                        warnings_list = []
+
+                        # Check chi-square assumptions if requested
+                        if check_assumptions:
+                            chi2_check = statistical_utils.check_chi2_expected_frequencies(contingency_table)
+                            if not chi2_check['valid']:
+                                warnings_list.append(f"{chi2_check['percent_cells_below_threshold']:.1f}% cells below expected frequency threshold")
+
                         chi2, pvalue, dof, expected = chi2_contingency(contingency_table)
-                        results.append({
-                            'feature': feature,
+                        result_dict.update({
                             'test_type': 'Chi-square test',
                             'statistic': chi2,
-                            'pvalue': pvalue,
-                            'significant': pvalue < 0.05
+                            'pvalue': pvalue
                         })
+
+                        # Calculate effect size if requested
+                        if report_effect_sizes:
+                            cramers_result = statistical_utils.cramers_v(contingency_table)
+                            result_dict['effect_size'] = cramers_result['cramers_v']
+                            result_dict['effect_interpretation'] = cramers_result['interpretation']
+
+                        # Add warnings if any
+                        if check_assumptions and warnings_list:
+                            result_dict['warnings'] = '; '.join(warnings_list)
+
+                        results.append(result_dict)
 
                 elif self.task == 'regression':
                     if pd.api.types.is_numeric_dtype(self.df[feature]):
                         # Pearson correlation for numeric feature vs numeric target
                         valid_idx = self.df[[feature, self.target_column]].dropna().index
-                        if len(valid_idx) > 2:
-                            corr, pvalue = pearsonr(self.df.loc[valid_idx, feature],
-                                                    self.df.loc[valid_idx, self.target_column])
-                            results.append({
-                                'feature': feature,
-                                'test_type': 'Pearson correlation',
-                                'statistic': corr,
-                                'pvalue': pvalue,
-                                'significant': pvalue < 0.05
-                            })
+                        if len(valid_idx) <= 2:
+                            continue
+
+                        corr, pvalue = pearsonr(self.df.loc[valid_idx, feature],
+                                                self.df.loc[valid_idx, self.target_column])
+
+                        result_dict = {
+                            'feature': feature,
+                            'test_type': 'Pearson correlation',
+                            'statistic': corr,
+                            'pvalue': pvalue
+                        }
+
+                        # Effect size for correlation is the correlation itself
+                        if report_effect_sizes:
+                            abs_corr = abs(corr)
+                            if abs_corr < 0.3:
+                                interpretation = 'small'
+                            elif abs_corr < 0.5:
+                                interpretation = 'medium'
+                            else:
+                                interpretation = 'large'
+                            result_dict['effect_size'] = corr
+                            result_dict['effect_interpretation'] = interpretation
+
+                        results.append(result_dict)
                     else:
                         # ANOVA F-test for categorical feature vs numeric target
                         # Optimized: use groupby instead of filtering for each category
                         groups = [group.dropna() for _, group in self.df.groupby(feature)[self.target_column]]
                         groups = [g for g in groups if len(g) > 0]
-                        if len(groups) >= 2:
-                            statistic, pvalue = f_oneway(*groups)
-                            results.append({
-                                'feature': feature,
-                                'test_type': 'ANOVA F-test',
-                                'statistic': statistic,
-                                'pvalue': pvalue,
-                                'significant': pvalue < 0.05
-                            })
+
+                        if len(groups) < 2:
+                            continue
+
+                        statistic, pvalue = f_oneway(*groups)
+                        result_dict = {
+                            'feature': feature,
+                            'test_type': 'ANOVA F-test',
+                            'statistic': statistic,
+                            'pvalue': pvalue
+                        }
+
+                        # Calculate effect size if requested
+                        if report_effect_sizes:
+                            effect_size_result = statistical_utils.eta_squared(groups)
+                            result_dict['effect_size'] = effect_size_result['eta_squared']
+                            result_dict['effect_interpretation'] = effect_size_result['interpretation']
+
+                        results.append(result_dict)
 
             except Exception as e:
                 logger.warning(f"Could not analyze feature '{feature}': {e}")
                 continue
 
         df_results = pd.DataFrame(results)
-        if not df_results.empty:
-            df_results = df_results.sort_values('pvalue')
+
+        if df_results.empty:
+            return df_results
+
+        # Apply multiple testing correction if requested
+        if correct_multiple_tests and len(df_results) > 1:
+            correction_result = statistical_utils.apply_multiple_testing_correction(
+                df_results['pvalue'].values,
+                method='fdr_bh',
+                alpha=alpha
+            )
+
+            df_results['pvalue_corrected'] = correction_result['corrected_pvalues']
+            df_results['significant_raw'] = df_results['pvalue'] < alpha
+            df_results['significant_corrected'] = correction_result['reject']
+
+            logger.info(f"Multiple testing correction: {correction_result['num_significant_raw']} "
+                       f"→ {correction_result['num_significant_corrected']} significant features")
+        else:
+            # Backward compatible: single 'significant' column
+            df_results['significant'] = df_results['pvalue'] < alpha
+
+        df_results = df_results.sort_values('pvalue')
 
         return df_results
 
-    def analyze_class_wise_statistics(self, feature_columns: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
+    def analyze_class_wise_statistics(self,
+                                      feature_columns: Optional[List[str]] = None,
+                                      confidence_level: float = 0.95,
+                                      include_ci: bool = False) -> Dict[str, pd.DataFrame]:
         """
         Compute statistics for each feature broken down by target class (classification only).
 
         Args:
             feature_columns: List of numeric feature columns. If None, uses all numeric columns.
+            confidence_level: Confidence level for CIs (default 0.95)
+            include_ci: Include confidence intervals for mean and median (default False for backward compatibility)
 
         Returns:
-            Dict mapping feature names to DataFrames with class-wise statistics
+            Dict mapping feature names to DataFrames with class-wise statistics.
+            If include_ci=True, includes mean_ci_lower, mean_ci_upper, median_ci_lower, median_ci_upper columns.
+
+        Example:
+            >>> analyzer = TargetAnalyzer(df, target_column='species')
+            >>> # Basic usage (backward compatible)
+            >>> stats = analyzer.analyze_class_wise_statistics()
+            >>>
+            >>> # With confidence intervals
+            >>> stats_with_ci = analyzer.analyze_class_wise_statistics(
+            ...     confidence_level=0.95,
+            ...     include_ci=True
+            ... )
         """
         if self.task != 'classification':
             logger.warning("analyze_class_wise_statistics() is only available for classification tasks")
@@ -1033,11 +1198,43 @@ class TargetAnalyzer(FeatureEngineeringBase):
                 ('max', 'max')
             ])
 
+            # Add confidence intervals if requested
+            if include_ci:
+                mean_ci_lower = []
+                mean_ci_upper = []
+                median_ci_lower = []
+                median_ci_upper = []
+
+                for cls in stats_df.index:
+                    class_data = self.df[self.df[self.target_column] == cls][feature].dropna()
+
+                    # Mean CI (parametric)
+                    mean_ci = statistical_utils.calculate_mean_ci(class_data, confidence=confidence_level)
+                    mean_ci_lower.append(mean_ci['ci_lower'])
+                    mean_ci_upper.append(mean_ci['ci_upper'])
+
+                    # Median CI (bootstrap)
+                    median_ci = statistical_utils.bootstrap_ci(
+                        class_data.values,
+                        statistic_func=np.median,
+                        n_bootstrap=1000,
+                        confidence=confidence_level,
+                        random_state=42
+                    )
+                    median_ci_lower.append(median_ci['ci_lower'])
+                    median_ci_upper.append(median_ci['ci_upper'])
+
+                # Add CI columns to stats_df
+                stats_df['mean_ci_lower'] = mean_ci_lower
+                stats_df['mean_ci_upper'] = mean_ci_upper
+                stats_df['median_ci_lower'] = median_ci_lower
+                stats_df['median_ci_upper'] = median_ci_upper
+
             # Convert to list of dicts matching expected format
             class_stats = []
             for cls, row in stats_df.iterrows():
                 if row['count'] > 0:
-                    class_stats.append({
+                    stat_dict = {
                         'class': cls,
                         'count': int(row['count']),
                         'mean': row['mean'],
@@ -1045,7 +1242,16 @@ class TargetAnalyzer(FeatureEngineeringBase):
                         'std': row['std'],
                         'min': row['min'],
                         'max': row['max']
-                    })
+                    }
+
+                    # Add CI columns if they exist
+                    if include_ci:
+                        stat_dict['mean_ci_lower'] = row['mean_ci_lower']
+                        stat_dict['mean_ci_upper'] = row['mean_ci_upper']
+                        stat_dict['median_ci_lower'] = row['median_ci_lower']
+                        stat_dict['median_ci_upper'] = row['median_ci_upper']
+
+                    class_stats.append(stat_dict)
 
             if class_stats:
                 results[feature] = pd.DataFrame(class_stats)
@@ -1102,17 +1308,39 @@ class TargetAnalyzer(FeatureEngineeringBase):
     # PHASE 3: Regression-Specific Analysis
     # ============================================================================
 
-    def analyze_feature_correlations(self, feature_columns: Optional[List[str]] = None,
-                                     method: str = 'pearson') -> pd.DataFrame:
+    def analyze_feature_correlations(self,
+                                     feature_columns: Optional[List[str]] = None,
+                                     method: str = 'pearson',
+                                     include_ci: bool = False,
+                                     check_linearity: bool = False,
+                                     confidence_level: float = 0.95) -> pd.DataFrame:
         """
         Analyze correlations between numeric features and target (regression only).
 
         Args:
             feature_columns: List of numeric features. If None, uses all numeric columns.
             method: Correlation method ('pearson' or 'spearman')
+            include_ci: Include confidence intervals for correlations (default False for backward compatibility)
+            check_linearity: Compare Pearson vs Spearman to detect non-linearity (default False for backward compatibility)
+            confidence_level: Confidence level for CIs (default 0.95)
 
         Returns:
-            DataFrame with columns: feature, correlation, abs_correlation, pvalue, significant
+            DataFrame with columns:
+            - feature, correlation, abs_correlation, pvalue, significant
+            - ci_lower, ci_upper (if include_ci=True)
+            - linearity_warning (if check_linearity=True)
+
+        Example:
+            >>> analyzer = TargetAnalyzer(df, target_column='price', task='regression')
+            >>> # Basic usage (backward compatible)
+            >>> corr = analyzer.analyze_feature_correlations()
+            >>>
+            >>> # With confidence intervals and linearity checks
+            >>> corr_enhanced = analyzer.analyze_feature_correlations(
+            ...     include_ci=True,
+            ...     check_linearity=True,
+            ...     confidence_level=0.95
+            ... )
         """
         if self.task != 'regression':
             logger.warning("analyze_feature_correlations() is only available for regression tasks")
@@ -1141,13 +1369,38 @@ class TargetAnalyzer(FeatureEngineeringBase):
                     logger.warning(f"Unknown correlation method: {method}")
                     continue
 
-                results.append({
+                result_dict = {
                     'feature': feature,
                     'correlation': corr,
                     'abs_correlation': abs(corr),
                     'pvalue': pvalue,
                     'significant': pvalue < 0.05
-                })
+                }
+
+                # Add confidence interval if requested
+                if include_ci:
+                    ci = statistical_utils.calculate_correlation_ci(
+                        corr,
+                        n=len(valid_idx),
+                        confidence=confidence_level
+                    )
+                    result_dict['ci_lower'] = ci['ci_lower']
+                    result_dict['ci_upper'] = ci['ci_upper']
+
+                # Check linearity if requested (only for Pearson)
+                if check_linearity and method == 'pearson':
+                    # Compare Pearson vs Spearman correlations
+                    spearman_corr, _ = spearmanr(self.df.loc[valid_idx, feature],
+                                                 self.df.loc[valid_idx, self.target_column])
+                    diff = abs(corr - spearman_corr)
+
+                    if diff > 0.2:
+                        result_dict['linearity_warning'] = f"Non-linear relationship detected (Spearman={spearman_corr:.3f}, diff={diff:.3f})"
+                    else:
+                        result_dict['linearity_warning'] = None
+
+                results.append(result_dict)
+
             except Exception as e:
                 logger.warning(f"Could not compute correlation for '{feature}': {e}")
                 continue

@@ -1,4 +1,4 @@
-# Feature Engineering Toolkit v2.3.0
+# Feature Engineering Toolkit v2.4.0
 
 [![PyPI version](https://badge.fury.io/py/feature-engineering-tk.svg)](https://badge.fury.io/py/feature-engineering-tk)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -9,6 +9,7 @@
 ## Features
 
 - **Smart Data Analysis**: Automatic EDA with comprehensive statistics and visualizations
+- **Statistical Robustness**: Assumption validation, effect sizes, confidence intervals, multiple testing corrections
 - **Column Type Detection**: Identify misclassified categorical columns and binning opportunities
 - **Target-Aware Analysis**: Advanced statistical analysis that auto-detects classification vs regression tasks
 - **Intelligent Recommendations**: Automated feature engineering suggestions based on data characteristics
@@ -29,6 +30,63 @@ pip install feature-engineering-tk
 ```
 
 **Requirements:** Python 3.8+
+
+## What's New in v2.4.0
+
+**Statistical Robustness Features:**
+
+### 📊 Statistical Validity & Confidence
+Comprehensive statistical robustness utilities ensure valid, reliable analyses:
+
+- **Assumption Validation**: Shapiro-Wilk normality tests, Levene's test for homogeneity of variance, sample size validation, chi-square expected frequency checks
+- **Effect Sizes**: Cohen's d, eta-squared (η²), Cramér's V with interpretations (small/medium/large)
+- **Multiple Testing Corrections**: Benjamini-Hochberg FDR and Bonferroni corrections to control false positives
+- **Confidence Intervals**: Parametric CIs for means, Fisher Z-transformation for correlations, bootstrap CIs for any statistic
+- **Non-parametric Fallbacks**: Automatic switch to Kruskal-Wallis when ANOVA assumptions violated
+
+Enhanced TargetAnalyzer methods with opt-in statistical rigor:
+```python
+# Feature-target relationships with full statistical validation
+relationships = analyzer.analyze_feature_target_relationship(
+    check_assumptions=True,      # Validate assumptions, auto-switch to non-parametric
+    report_effect_sizes=True,    # Include practical significance measures
+    correct_multiple_tests=True  # Apply Benjamini-Hochberg FDR correction
+)
+
+# Class-wise statistics with confidence intervals
+class_stats = analyzer.analyze_class_wise_statistics(
+    include_ci=True,          # Parametric CIs for means, bootstrap CIs for medians
+    confidence_level=0.95
+)
+
+# Correlations with CIs and linearity checks
+correlations = analyzer.analyze_feature_correlations(
+    include_ci=True,          # Fisher Z-transformation CIs
+    check_linearity=True      # Detect non-linear relationships
+)
+```
+
+**Direct access to statistical utilities:**
+```python
+from feature_engineering_tk import statistical_utils
+
+# Check assumptions
+normality = statistical_utils.check_normality(data)
+variance_check = statistical_utils.check_homogeneity_of_variance([group1, group2])
+
+# Calculate effect sizes
+effect = statistical_utils.cohens_d(group1, group2)
+
+# Apply multiple testing correction
+correction = statistical_utils.apply_multiple_testing_correction(pvalues, method='fdr_bh')
+
+# Bootstrap confidence intervals
+ci = statistical_utils.bootstrap_ci(data, statistic_func=np.median)
+```
+
+**100% backward compatible** - all enhancements are opt-in via optional parameters.
+
+---
 
 ## What's New in v2.3.0
 
@@ -291,6 +349,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full list of changes.
 ## Modules
 
 - **data_analysis.py**: Exploratory data analysis and visualization
+- **statistical_utils.py**: Statistical assumption validation, effect sizes, confidence intervals, multiple testing corrections
 - **feature_engineering.py**: Feature transformation and creation
 - **preprocessing.py**: Data cleaning and preprocessing
 - **feature_selection.py**: Feature selection methods
@@ -430,6 +489,131 @@ analyzer.export_report('analysis.html', format='html')
 analyzer.export_report('analysis.md', format='markdown')
 analyzer.export_report('analysis.json', format='json')
 ```
+
+### 2.1 Statistical Robustness Features
+
+The Feature Engineering Toolkit includes comprehensive statistical robustness utilities to ensure valid, reliable statistical analyses:
+
+```python
+from feature_engineering_tk import TargetAnalyzer
+
+analyzer = TargetAnalyzer(df, target_column='target', task='classification')
+
+# Feature-target relationships with statistical rigor
+relationships = analyzer.analyze_feature_target_relationship(
+    check_assumptions=True,      # Validate statistical assumptions
+    report_effect_sizes=True,    # Include effect sizes (practical significance)
+    correct_multiple_tests=True, # Apply Benjamini-Hochberg FDR correction
+    alpha=0.05
+)
+
+# Returns DataFrame with:
+# - pvalue, pvalue_corrected: Raw and FDR-corrected p-values
+# - significant_raw, significant_corrected: Significance flags
+# - effect_size, effect_interpretation: Practical significance measures
+# - assumptions_met: Whether test assumptions were satisfied
+# - warnings: Any assumption violations or recommendations
+
+# Class-wise statistics with confidence intervals
+class_stats = analyzer.analyze_class_wise_statistics(
+    include_ci=True,          # Include confidence intervals
+    confidence_level=0.95     # 95% CI (default)
+)
+
+# Returns statistics with uncertainty quantification:
+# - mean, mean_ci_lower, mean_ci_upper: Mean with parametric CI
+# - median, median_ci_lower, median_ci_upper: Median with bootstrap CI
+
+# Feature correlations with confidence intervals and linearity checks
+correlations = analyzer.analyze_feature_correlations(
+    method='pearson',
+    include_ci=True,          # Include Fisher Z-transformation CIs
+    check_linearity=True,     # Detect non-linear relationships
+    confidence_level=0.95
+)
+
+# Returns DataFrame with:
+# - correlation, ci_lower, ci_upper: Correlation with 95% CI
+# - linearity_warning: Flags when Pearson vs Spearman differ significantly
+```
+
+**Key Statistical Features:**
+
+**Assumption Validation:**
+- Shapiro-Wilk normality test
+- Levene's test for homogeneity of variance
+- Sample size validation
+- Chi-square expected frequency checks
+- Automatic fallback to non-parametric tests (Kruskal-Wallis) when assumptions violated
+
+**Effect Sizes (Practical Significance):**
+- Cohen's d for t-tests (small: 0.2, medium: 0.5, large: 0.8)
+- Eta-squared (η²) for ANOVA
+- Cramér's V for chi-square tests
+- Interpretations included (negligible, small, medium, large)
+
+**Multiple Testing Corrections:**
+- Benjamini-Hochberg FDR correction (default, less conservative)
+- Bonferroni correction (most conservative)
+- Prevents false positives when testing multiple features
+
+**Confidence Intervals:**
+- Parametric CIs for means (t-distribution)
+- Fisher Z-transformation for correlation CIs
+- Bootstrap CIs for medians and custom statistics
+- Quantifies uncertainty in all estimates
+
+**Direct Access to Statistical Utilities:**
+
+```python
+from feature_engineering_tk import statistical_utils
+
+# Check normality assumption
+normality = statistical_utils.check_normality(data, method='shapiro')
+# Returns: {'is_normal': bool, 'pvalue': float, 'recommendation': str}
+
+# Check homogeneity of variance
+variance_check = statistical_utils.check_homogeneity_of_variance(
+    [group1, group2, group3],
+    method='levene'
+)
+# Returns: {'equal_variances': bool, 'recommendation': str}
+
+# Calculate effect size
+effect = statistical_utils.cohens_d(group1, group2)
+# Returns: {'cohens_d': float, 'interpretation': 'small'|'medium'|'large'}
+
+# Apply multiple testing correction
+correction = statistical_utils.apply_multiple_testing_correction(
+    pvalues=[0.001, 0.01, 0.03, 0.05],
+    method='fdr_bh',  # or 'bonferroni'
+    alpha=0.05
+)
+# Returns: {'corrected_pvalues': array, 'reject': array, ...}
+
+# Bootstrap confidence intervals
+ci = statistical_utils.bootstrap_ci(
+    data,
+    statistic_func=np.median,  # or any custom function
+    n_bootstrap=1000,
+    confidence=0.95
+)
+# Returns: {'statistic': float, 'ci_lower': float, 'ci_upper': float}
+```
+
+**Why This Matters:**
+
+Without statistical robustness, you risk:
+- **False Positives**: 5% false positive rate per test → expect 5 spurious "significant" features out of 100
+- **Invalid Results**: ANOVA on non-normal data or unequal variances produces misleading p-values
+- **Misinterpretation**: p<0.05 with tiny effect size is statistically significant but practically meaningless
+- **Unreliable Estimates**: Point estimates without confidence intervals hide uncertainty
+
+With these features, you get:
+- **Valid Statistical Tests**: Automatic assumption checking with non-parametric fallbacks
+- **Controlled Error Rates**: Multiple testing corrections prevent false discoveries
+- **Practical Significance**: Effect sizes show whether differences actually matter
+- **Uncertainty Quantification**: Confidence intervals reveal reliability of estimates
 
 ### 3. Data Preprocessing
 

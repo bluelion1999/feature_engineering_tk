@@ -22,8 +22,9 @@ from .exceptions import (
     TransformerNotFittedError,
     ConstantColumnError,
 )
+from . import statistical_utils
 
-__version__ = '2.3.0'
+__version__ = '2.4.0'
 
 __all__ = [
     # Main Classes
@@ -47,4 +48,6 @@ __all__ = [
     'InsufficientDataError',
     'TransformerNotFittedError',
     'ConstantColumnError',
+    # Statistical Utilities
+    'statistical_utils',
 ]

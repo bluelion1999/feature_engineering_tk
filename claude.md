@@ -9,12 +9,38 @@
 - **Repository**: https://github.com/bluelion1999/feature_engineering_tk
 - **Default Branch**: master
 - **Python Version**: 3.8+
-- **Current Version**: 2.3.0
-- **Last Major Refactor**: 2025-12-09 (Redundancy Reduction)
+- **Current Version**: 2.4.0
+- **Last Major Enhancement**: 2026-01-02 (Statistical Robustness)
 
 ---
 
 ## Recent Major Changes
+
+### Version 2.4.0 Release (2026-01-02)
+**Status**: Completed on feature/statistical-robustness branch
+**Focus**: Statistical robustness and validity enhancements
+
+#### New Statistical Utilities Module
+- Added `statistical_utils.py` with 11 comprehensive functions
+- Assumption validation (normality, homogeneity, sample size, chi-square)
+- Effect size calculations (Cohen's d, η², Cramér's V)
+- Multiple testing corrections (Benjamini-Hochberg FDR, Bonferroni)
+- Confidence interval utilities (parametric, Fisher Z, bootstrap)
+
+#### Enhanced TargetAnalyzer Methods
+- `analyze_feature_target_relationship()`: Assumption validation, effect sizes, multiple testing correction
+- `analyze_class_wise_statistics()`: Confidence intervals for means and medians
+- `analyze_feature_correlations()`: Correlation CIs and linearity detection
+- All enhancements opt-in via optional parameters (100% backward compatible)
+
+#### Testing & Documentation
+- Added 29 comprehensive tests (211 total: 182 baseline + 29 new)
+- Comprehensive README and claude.md documentation
+- Full API documentation for all statistical utilities
+
+**Benefits**: Valid statistical tests, controlled error rates, practical significance measures, uncertainty quantification
+
+---
 
 ### Version 2.3.0 Release (2025-12-10)
 **Status**: Completed on fly_catcher branch
@@ -374,6 +400,64 @@ if not columns:
 
 **Usage**: All validation and column selection operations throughout the codebase use these utilities for consistency.
 
+### statistical_utils.py (NEW)
+**Statistical robustness utilities for assumption validation, effect sizes, and confidence intervals**
+
+**Assumption Validation Functions**:
+- `check_normality(data, method='shapiro', alpha=0.05)`: Tests normality assumption
+  - Returns: `{'is_normal': bool, 'pvalue': float, 'recommendation': str, 'sample_size': int}`
+  - Handles large samples (>5000) with automatic subsampling
+  - Supports: shapiro, normaltest, anderson
+
+- `check_homogeneity_of_variance(groups, method='levene', alpha=0.05)`: Tests equal variance assumption
+  - Returns: `{'equal_variances': bool, 'pvalue': float, 'recommendation': str}`
+  - Recommends standard ANOVA, Welch's ANOVA, or non-parametric tests
+
+- `validate_sample_size(groups, test_type='anova', min_size=30)`: Validates sample size requirements
+  - Returns: `{'sufficient': bool, 'actual_sizes': List[int], 'warning': Optional[str]}`
+  - Test types: anova, ttest, chi2, correlation
+
+- `check_chi2_expected_frequencies(contingency_table, min_expected=5)`: Validates chi-square assumptions
+  - Returns: `{'valid': bool, 'min_expected': float, 'percent_cells_below_threshold': float}`
+  - Recommends Fisher's exact test for 2×2 tables with low expected frequencies
+
+**Effect Size Calculations**:
+- `cohens_d(group1, group2, pooled=True)`: Cohen's d for t-tests
+  - Returns: `{'cohens_d': float, 'interpretation': str, 'description': str}`
+  - Interpretations: small (0.2), medium (0.5), large (0.8)
+
+- `eta_squared(groups, f_statistic, df_between, df_within)`: Eta-squared for ANOVA
+  - Returns: `{'eta_squared': float, 'interpretation': str, 'percent_variance_explained': float}`
+  - Alternative: can calculate from groups directly
+
+- `cramers_v(contingency_table, correction=True)`: Cramér's V for chi-square
+  - Returns: `{'cramers_v': float, 'interpretation': str, 'chi2_statistic': float, 'pvalue': float}`
+  - Bias correction for small samples
+
+- `pearson_r_to_d(r)`: Converts Pearson r to Cohen's d for comparison
+  - Formula: d = 2r / √(1-r²)
+
+**Multiple Testing Corrections**:
+- `apply_multiple_testing_correction(pvalues, method='fdr_bh', alpha=0.05)`: Apply corrections
+  - Returns: `{'corrected_pvalues': array, 'reject': array, 'num_significant_raw': int, 'num_significant_corrected': int}`
+  - Methods: fdr_bh (Benjamini-Hochberg FDR), bonferroni, holm
+  - Uses statsmodels.stats.multitest
+
+**Confidence Interval Utilities**:
+- `calculate_mean_ci(data, confidence=0.95)`: Parametric CI for mean
+  - Returns: `{'mean': float, 'ci_lower': float, 'ci_upper': float, 'margin_of_error': float}`
+  - Uses t-distribution
+
+- `calculate_correlation_ci(r, n, confidence=0.95)`: CI for Pearson correlation
+  - Returns: `{'r': float, 'ci_lower': float, 'ci_upper': float}`
+  - Uses Fisher Z-transformation
+
+- `bootstrap_ci(data, statistic_func, n_bootstrap=1000, confidence=0.95, random_state=None)`: Non-parametric bootstrap CI
+  - Returns: `{'statistic': float, 'ci_lower': float, 'ci_upper': float, 'bootstrap_distribution': array}`
+  - Works with any statistic function (e.g., np.median, custom functions)
+
+**Usage**: Import as `from feature_engineering_tk import statistical_utils` or use via enhanced TargetAnalyzer methods.
+
 ### data_analysis.py
 **Classes**: `DataAnalyzer`, `TargetAnalyzer` (read-only, no inplace operations)
 
@@ -632,7 +716,7 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
 
 ## Testing
 
-**182 tests** across 6 test files:
+**211 tests** across 7 test files:
 - `test_preprocessing.py`: 53 tests
   - 11 core tests (inplace bugs, deprecated methods, div-by-zero)
   - 7 string preprocessing tests (v2.2.0)
@@ -642,6 +726,7 @@ z_scores = np.abs((df[col] - df[col].mean()) / col_std)
   - 17 operation history tracking tests (v2.2.0)
 - `test_feature_engineering.py`: 13 tests (inplace bugs, transformer persistence)
 - `test_data_analysis.py`: 17 tests (div-by-zero protection, VIF calculation, **NEW v2.2.0**: categorical detection, binning suggestions)
+- `test_statistical_utils.py`: 29 tests (**NEW 2026-01-02**: assumption checks, effect sizes, multiple testing corrections, confidence intervals, edge cases, integration tests)
 - `test_target_analyzer.py`: 87 tests (Phases 1-5,7-8: task detection, statistical tests, correlations, MI, VIF delegation, data quality, recommendations, report generation, feature engineering suggestions, model recommendations, integration tests)
 - `test_exceptions.py`: 4 tests (custom exception messages)
 - `test_plotting.py`: 8 tests (figure returns, save capability)

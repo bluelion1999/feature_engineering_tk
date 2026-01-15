@@ -190,6 +190,24 @@ class TestClassificationAnalysis:
         imbalance = analyzer.get_class_imbalance_info()
         assert imbalance['severity'] == 'severe'
 
+    def test_class_imbalance_single_class_no_div_by_zero(self):
+        """Test class imbalance with single class doesn't cause division by zero (Bug #2)."""
+        # Single class scenario
+        df_single = pd.DataFrame({
+            'feature': [1, 2, 3, 4, 5],
+            'target': [0, 0, 0, 0, 0]  # Only one class
+        })
+        analyzer = TargetAnalyzer(df_single, target_column='target')
+
+        # Should handle single class gracefully (imbalance_ratio = 1.0, not division by zero)
+        imbalance = analyzer.get_class_imbalance_info()
+
+        assert 'imbalance_ratio' in imbalance
+        assert isinstance(imbalance['imbalance_ratio'], (int, float))
+        # With one class, ratio should be 1.0 (max/min when both are same)
+        assert imbalance['imbalance_ratio'] == 1.0
+        assert imbalance['is_balanced'] == True  # numpy bool requires == not is
+
     def test_plot_class_distribution(self, classification_df):
         """Test class distribution plotting returns Figure"""
         analyzer = TargetAnalyzer(classification_df, target_column='target')

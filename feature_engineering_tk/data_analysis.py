@@ -665,7 +665,14 @@ class TargetAnalyzer(FeatureEngineeringBase):
 
         majority_class = dist.loc[dist['count'].idxmax(), 'class']
         minority_class = dist.loc[dist['count'].idxmin(), 'class']
-        imbalance_ratio = dist['count'].max() / dist['count'].min()
+
+        # Check for division by zero
+        min_count = dist['count'].min()
+        if min_count == 0:
+            logger.warning("One or more classes have 0 samples, cannot compute imbalance ratio")
+            imbalance_ratio = float('inf')
+        else:
+            imbalance_ratio = dist['count'].max() / min_count
 
         info = {
             'is_balanced': imbalance_ratio <= 1.5,
@@ -673,7 +680,7 @@ class TargetAnalyzer(FeatureEngineeringBase):
             'majority_class': majority_class,
             'majority_count': int(dist['count'].max()),
             'minority_class': minority_class,
-            'minority_count': int(dist['count'].min()),
+            'minority_count': int(min_count),
         }
 
         # Severity and recommendations

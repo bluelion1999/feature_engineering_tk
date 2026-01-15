@@ -1050,6 +1050,21 @@ class TestPhase7FeatureEngineeringSuggestions:
         # Should return empty list or minimal suggestions
         assert isinstance(suggestions, list)
 
+    def test_feature_engineering_suggestions_with_constant_feature(self):
+        """Test feature suggestions with constant feature (Bug #4)."""
+        df = pd.DataFrame({
+            'constant': [1.0, 1.0, 1.0, 1.0, 1.0],
+            'normal': [1, 2, 3, 4, 5],
+            'target': [10, 20, 30, 40, 50]
+        })
+        analyzer = TargetAnalyzer(df, target_column='target', task='regression')
+
+        # Should not crash with NaN correlation
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should handle gracefully
+        assert isinstance(suggestions, list)
+
 
 # =======================
 # Phase 8: Model Recommendations Tests

@@ -2159,11 +2159,23 @@ class TargetAnalyzer(FeatureEngineeringBase):
             if self.task == 'regression' and len(col_data) > 20:
                 # Compare linear vs polynomial correlation
                 target_clean = self.df[self.target_column].loc[col_data.index]
-                linear_corr = abs(np.corrcoef(col_data, target_clean)[0, 1])
+                linear_corr = np.corrcoef(col_data, target_clean)[0, 1]
+
+                # Skip if correlation is NaN (e.g., constant feature)
+                if np.isnan(linear_corr):
+                    continue
+
+                linear_corr = abs(linear_corr)
 
                 # Create polynomial features
                 col_squared = col_data ** 2
-                poly_corr = abs(np.corrcoef(col_squared, target_clean)[0, 1])
+                poly_corr = np.corrcoef(col_squared, target_clean)[0, 1]
+
+                # Skip if polynomial correlation is NaN
+                if np.isnan(poly_corr):
+                    continue
+
+                poly_corr = abs(poly_corr)
 
                 if poly_corr > linear_corr * self.NONLINEAR_IMPROVEMENT_THRESHOLD:  # 20% improvement
                     suggestions.append({

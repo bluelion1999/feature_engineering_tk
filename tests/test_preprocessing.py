@@ -324,6 +324,29 @@ class TestDataValidation:
         assert 'x_missing' in result.columns
         assert result['x_missing'].tolist() == [0, 1, 0]
 
+    def test_create_missing_indicators_uses_df_result_not_self_df(self):
+        """Test that create_missing_indicators correctly uses df_result (Bug #1 fix).
+
+        Bug #1: Line 1093 previously used self.df[col] instead of df_result[col].
+        This test verifies the fix uses df_result correctly.
+        """
+        # Simple test: Create DataFrame with missing values
+        df = pd.DataFrame({
+            'x': [1, np.nan, 3, np.nan, 5],
+            'y': [10, 20, 30, 40, 50]
+        })
+        preprocessor = DataPreprocessor(df)
+
+        # Call create_missing_indicators with inplace=False
+        result = preprocessor.create_missing_indicators(['x'], inplace=False)
+
+        # Verify correct behavior
+        assert 'x_was_missing' in result.columns
+        assert result['x_was_missing'].tolist() == [0, 1, 0, 1, 0]
+
+        # Ensure original preprocessor.df unchanged
+        assert 'x_was_missing' not in preprocessor.df.columns
+
 
 class TestEnhancedErrorHandling:
     """Tests for enhanced error handling in existing methods."""

@@ -1090,7 +1090,7 @@ class DataPreprocessor(FeatureEngineeringBase):
         for col in columns:
 
             new_col = f"{col}{suffix}"
-            df_result[new_col] = self.df[col].isnull().astype(int)
+            df_result[new_col] = df_result[col].isnull().astype(int)
 
             missing_count = df_result[new_col].sum()
             if missing_count > 0:

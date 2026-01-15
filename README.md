@@ -1,4 +1,4 @@
-# Feature Engineering Toolkit v2.4.0
+# Feature Engineering Toolkit v2.4.1
 
 [![PyPI version](https://badge.fury.io/py/feature-engineering-tk.svg)](https://badge.fury.io/py/feature-engineering-tk)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -30,6 +30,22 @@ pip install feature-engineering-tk
 ```
 
 **Requirements:** Python 3.8+
+
+## What's New in v2.4.1
+
+**Bug Fixes & Reliability Improvements:**
+
+This release focuses on critical bug fixes to improve reliability and edge case handling:
+
+- **Fixed DataFrame reference bug** in `create_missing_indicators()` - now correctly uses modified DataFrame when `inplace=False`
+- **Fixed division by zero** in class imbalance calculation for single-class targets
+- **Fixed unsafe .iloc[0] access** in categorical summary with empty value_counts
+- **Fixed NaN correlation handling** in feature engineering suggestions for constant features
+- **Implemented zscore outlier capping** - now supports both IQR and zscore methods for capping action
+- **Added mode imputation warning** - warns when multiple modes detected during missing value imputation
+- **Improved groupby validation** - optimized efficiency for single-class target scenarios
+
+All fixes verified with comprehensive test-driven development (218 tests passing).
 
 ## What's New in v2.4.0
 

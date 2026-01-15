@@ -9,12 +9,43 @@
 - **Repository**: https://github.com/bluelion1999/feature_engineering_tk
 - **Default Branch**: master
 - **Python Version**: 3.8+
-- **Current Version**: 2.4.0
-- **Last Major Enhancement**: 2026-01-02 (Statistical Robustness)
+- **Current Version**: 2.4.1
+- **Last Major Enhancement**: 2026-01-15 (Bug Fixes)
 
 ---
 
 ## Recent Major Changes
+
+### Version 2.4.1 Release (2026-01-15)
+**Status**: Completed on fly_catcher branch
+**Focus**: Critical bug fixes using test-driven development
+
+#### Bug Fixes (7 total: 4 critical + 3 medium severity)
+**Critical Bugs Fixed**:
+1. **DataFrame reference bug** in `create_missing_indicators()` - Fixed to use `df_result` instead of `self.df` when `inplace=False`
+2. **Division by zero** in class imbalance calculation - Added protection for single-class targets
+3. **Unsafe .iloc[0] access** in get_categorical_summary - Added validation for empty value_counts
+4. **NaN correlation handling** - Added NaN checks in feature engineering suggestions to skip constant features
+
+**Medium Severity Bugs Fixed**:
+5. **Incomplete outlier capping** - Implemented zscore capping (previously only supported IQR method)
+6. **Mode calculation edge case** - Added warning when multiple modes detected during imputation
+7. **Missing groupby validation** - Added upfront validation for single-class targets to improve efficiency
+
+#### Testing & Quality
+- Added 7 comprehensive tests (218 total: 211 baseline + 7 new)
+- All fixes verified with test-driven development (TDD)
+- No regressions introduced - 100% backward compatible
+- Test-first approach: write failing test → fix bug → verify test passes
+
+**Files Modified**:
+- `preprocessing.py` (3 bugs fixed)
+- `data_analysis.py` (4 bugs fixed)
+- Added tests in `test_preprocessing.py`, `test_data_analysis.py`, `test_target_analyzer.py`
+
+**Benefits**: Improved reliability, better edge case handling, enhanced user warnings, more efficient statistical operations
+
+---
 
 ### Version 2.4.0 Release (2026-01-02)
 **Status**: Completed on feature/statistical-robustness branch

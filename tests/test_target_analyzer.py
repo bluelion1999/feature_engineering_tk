@@ -190,6 +190,24 @@ class TestClassificationAnalysis:
         imbalance = analyzer.get_class_imbalance_info()
         assert imbalance['severity'] == 'severe'
 
+    def test_class_imbalance_single_class_no_div_by_zero(self):
+        """Test class imbalance with single class doesn't cause division by zero (Bug #2)."""
+        # Single class scenario
+        df_single = pd.DataFrame({
+            'feature': [1, 2, 3, 4, 5],
+            'target': [0, 0, 0, 0, 0]  # Only one class
+        })
+        analyzer = TargetAnalyzer(df_single, target_column='target')
+
+        # Should handle single class gracefully (imbalance_ratio = 1.0, not division by zero)
+        imbalance = analyzer.get_class_imbalance_info()
+
+        assert 'imbalance_ratio' in imbalance
+        assert isinstance(imbalance['imbalance_ratio'], (int, float))
+        # With one class, ratio should be 1.0 (max/min when both are same)
+        assert imbalance['imbalance_ratio'] == 1.0
+        assert imbalance['is_balanced'] == True  # numpy bool requires == not is
+
     def test_plot_class_distribution(self, classification_df):
         """Test class distribution plotting returns Figure"""
         analyzer = TargetAnalyzer(classification_df, target_column='target')
@@ -387,6 +405,22 @@ class TestPhase2ClassificationFeatures:
         assert 'statistic' in results.columns
         assert 'pvalue' in results.columns
         assert 'significant' in results.columns
+
+    def test_analyze_feature_target_relationship_single_class(self):
+        """Test feature-target relationship with only one target class (Bug #7)."""
+        df = pd.DataFrame({
+            'feature1': [1, 2, 3, 4, 5],
+            'feature2': ['A', 'B', 'A', 'B', 'A'],
+            'target': [0, 0, 0, 0, 0]  # Only one class
+        })
+        analyzer = TargetAnalyzer(df, target_column='target')
+
+        # Should handle single class gracefully (return empty or skip)
+        result = analyzer.analyze_feature_target_relationship()
+
+        # Should return empty DataFrame or handle gracefully (not crash)
+        assert isinstance(result, pd.DataFrame)
+        # Single class means no variance to test
 
     def test_analyze_class_wise_statistics(self, classification_df):
         """Test class-wise statistics computation"""
@@ -1030,6 +1064,21 @@ class TestPhase7FeatureEngineeringSuggestions:
         suggestions = analyzer.suggest_feature_engineering()
 
         # Should return empty list or minimal suggestions
+        assert isinstance(suggestions, list)
+
+    def test_feature_engineering_suggestions_with_constant_feature(self):
+        """Test feature suggestions with constant feature (Bug #4)."""
+        df = pd.DataFrame({
+            'constant': [1.0, 1.0, 1.0, 1.0, 1.0],
+            'normal': [1, 2, 3, 4, 5],
+            'target': [10, 20, 30, 40, 50]
+        })
+        analyzer = TargetAnalyzer(df, target_column='target', task='regression')
+
+        # Should not crash with NaN correlation
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should handle gracefully
         assert isinstance(suggestions, list)
 
 

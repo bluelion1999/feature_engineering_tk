@@ -187,6 +187,8 @@ class DataPreprocessor(FeatureEngineeringBase):
             for col in columns:
                 mode_val = df_result[col].mode()
                 if len(mode_val) > 0:
+                    if len(mode_val) > 1:
+                        logger.warning(f"Column '{col}' has {len(mode_val)} modes. Using first mode: {mode_val[0]}")
                     df_result[col] = df_result[col].fillna(mode_val[0])
 
         elif strategy == 'forward_fill':
@@ -367,8 +369,15 @@ class DataPreprocessor(FeatureEngineeringBase):
                 if method == 'iqr':
                     df_result.loc[df_result[col] < lower_bound, col] = lower_bound
                     df_result.loc[df_result[col] > upper_bound, col] = upper_bound
-                else:
-                    logger.warning("Capping is only supported for IQR method")
+                else:  # zscore method
+                    # Cap at mean ± threshold * std
+                    mean_val = df_result[col].mean()
+                    std_val = df_result[col].std()
+                    lower_cap = mean_val - threshold * std_val
+                    upper_cap = mean_val + threshold * std_val
+                    df_result.loc[df_result[col] < lower_cap, col] = lower_cap
+                    df_result.loc[df_result[col] > upper_cap, col] = upper_cap
+                    logger.info(f"Capped outliers in '{col}' using z-score method (threshold={threshold})")
 
             elif action == 'replace':
                 if replace_with == 'median':
@@ -1090,7 +1099,7 @@ class DataPreprocessor(FeatureEngineeringBase):
         for col in columns:
 
             new_col = f"{col}{suffix}"
-            df_result[new_col] = self.df[col].isnull().astype(int)
+            df_result[new_col] = df_result[col].isnull().astype(int)
 
             missing_count = df_result[new_col].sum()
             if missing_count > 0:

@@ -76,12 +76,14 @@ class DataAnalyzer(FeatureEngineeringBase):
             unique_count = self.df[col].nunique()
             if unique_count <= max_unique:
                 top_value = self.df[col].mode()[0] if len(self.df[col].mode()) > 0 else None
+                # Check if value_counts is empty before accessing .iloc[0]
+                value_counts = self.df[col].value_counts()
                 summary.append({
                     'column': col,
                     'unique_count': unique_count,
                     'top_value': top_value,
-                    'top_value_freq': self.df[col].value_counts().iloc[0] if unique_count > 0 else 0,
-                    'top_value_percent': (self.df[col].value_counts().iloc[0] / len(self.df) * 100) if unique_count > 0 else 0
+                    'top_value_freq': value_counts.iloc[0] if len(value_counts) > 0 else 0,
+                    'top_value_percent': (value_counts.iloc[0] / len(self.df) * 100) if len(value_counts) > 0 else 0
                 })
 
         return pd.DataFrame(summary)
@@ -665,7 +667,14 @@ class TargetAnalyzer(FeatureEngineeringBase):
 
         majority_class = dist.loc[dist['count'].idxmax(), 'class']
         minority_class = dist.loc[dist['count'].idxmin(), 'class']
-        imbalance_ratio = dist['count'].max() / dist['count'].min()
+
+        # Check for division by zero
+        min_count = dist['count'].min()
+        if min_count == 0:
+            logger.warning("One or more classes have 0 samples, cannot compute imbalance ratio")
+            imbalance_ratio = float('inf')
+        else:
+            imbalance_ratio = dist['count'].max() / min_count
 
         info = {
             'is_balanced': imbalance_ratio <= 1.5,
@@ -673,7 +682,7 @@ class TargetAnalyzer(FeatureEngineeringBase):
             'majority_class': majority_class,
             'majority_count': int(dist['count'].max()),
             'minority_class': minority_class,
-            'minority_count': int(dist['count'].min()),
+            'minority_count': int(min_count),
         }
 
         # Severity and recommendations
@@ -958,6 +967,11 @@ class TargetAnalyzer(FeatureEngineeringBase):
 
             try:
                 if self.task == 'classification':
+                    # Check for minimum number of groups before processing
+                    if self.df[self.target_column].nunique() < 2:
+                        logger.warning(f"Target column '{self.target_column}' has less than 2 unique values, skipping statistical tests")
+                        return pd.DataFrame()
+
                     if pd.api.types.is_numeric_dtype(self.df[feature]):
                         # ANOVA F-test for numeric feature vs categorical target
                         # Optimized: use groupby instead of filtering for each class
@@ -2150,11 +2164,23 @@ class TargetAnalyzer(FeatureEngineeringBase):
             if self.task == 'regression' and len(col_data) > 20:
                 # Compare linear vs polynomial correlation
                 target_clean = self.df[self.target_column].loc[col_data.index]
-                linear_corr = abs(np.corrcoef(col_data, target_clean)[0, 1])
+                linear_corr = np.corrcoef(col_data, target_clean)[0, 1]
+
+                # Skip if correlation is NaN (e.g., constant feature)
+                if np.isnan(linear_corr):
+                    continue
+
+                linear_corr = abs(linear_corr)
 
                 # Create polynomial features
                 col_squared = col_data ** 2
-                poly_corr = abs(np.corrcoef(col_squared, target_clean)[0, 1])
+                poly_corr = np.corrcoef(col_squared, target_clean)[0, 1]
+
+                # Skip if polynomial correlation is NaN
+                if np.isnan(poly_corr):
+                    continue
+
+                poly_corr = abs(poly_corr)
 
                 if poly_corr > linear_corr * self.NONLINEAR_IMPROVEMENT_THRESHOLD:  # 20% improvement
                     suggestions.append({

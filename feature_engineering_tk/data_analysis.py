@@ -967,6 +967,11 @@ class TargetAnalyzer(FeatureEngineeringBase):
 
             try:
                 if self.task == 'classification':
+                    # Check for minimum number of groups before processing
+                    if self.df[self.target_column].nunique() < 2:
+                        logger.warning(f"Target column '{self.target_column}' has less than 2 unique values, skipping statistical tests")
+                        return pd.DataFrame()
+
                     if pd.api.types.is_numeric_dtype(self.df[feature]):
                         # ANOVA F-test for numeric feature vs categorical target
                         # Optimized: use groupby instead of filtering for each class

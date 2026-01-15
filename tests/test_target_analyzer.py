@@ -406,6 +406,22 @@ class TestPhase2ClassificationFeatures:
         assert 'pvalue' in results.columns
         assert 'significant' in results.columns
 
+    def test_analyze_feature_target_relationship_single_class(self):
+        """Test feature-target relationship with only one target class (Bug #7)."""
+        df = pd.DataFrame({
+            'feature1': [1, 2, 3, 4, 5],
+            'feature2': ['A', 'B', 'A', 'B', 'A'],
+            'target': [0, 0, 0, 0, 0]  # Only one class
+        })
+        analyzer = TargetAnalyzer(df, target_column='target')
+
+        # Should handle single class gracefully (return empty or skip)
+        result = analyzer.analyze_feature_target_relationship()
+
+        # Should return empty DataFrame or handle gracefully (not crash)
+        assert isinstance(result, pd.DataFrame)
+        # Single class means no variance to test
+
     def test_analyze_class_wise_statistics(self, classification_df):
         """Test class-wise statistics computation"""
         analyzer = TargetAnalyzer(classification_df, target_column='target')

@@ -134,6 +134,27 @@ class TestDataPreprocessor:
         assert 'constant' in result.columns
         assert len(result) < len(df)  # Outlier 100 should be removed from variable
 
+    def test_handle_outliers_zscore_cap_action(self):
+        """Test that zscore method supports capping action (Bug #5)."""
+        df = pd.DataFrame({
+            'values': [1, 2, 3, 4, 5, 100]  # 100 is outlier
+        })
+        preprocessor = DataPreprocessor(df)
+
+        # Should cap the outlier, not remove or do nothing
+        result = preprocessor.handle_outliers(
+            columns=['values'],
+            method='zscore',
+            action='cap',
+            threshold=2.0,
+            inplace=False
+        )
+
+        # Outlier should be capped, not removed
+        assert len(result) == 6, "Should keep all rows when capping"
+        assert result['values'].max() < 100, "Outlier should be capped"
+        assert result['values'].max() > 5, "Cap should be above normal values"
+
     def test_input_validation(self, sample_df):
         """Test input validation for various methods."""
         preprocessor = DataPreprocessor(sample_df)
@@ -386,6 +407,24 @@ class TestEnhancedErrorHandling:
         # This should log a warning (would need to capture logs to test properly)
         result = preprocessor.handle_missing_values(strategy='drop', columns=['x'])
         assert len(result) == 1  # Only one non-missing row
+
+    def test_handle_missing_values_multiple_modes_warning(self, caplog):
+        """Test that multiple modes trigger a warning (Bug #6)."""
+        df = pd.DataFrame({
+            'bimodal': [1, 1, 2, 2, np.nan]  # Two modes: 1 and 2
+        })
+        preprocessor = DataPreprocessor(df)
+
+        with caplog.at_level('WARNING'):
+            result = preprocessor.handle_missing_values(
+                strategy='mode',
+                inplace=False
+            )
+
+        # Should log warning about multiple modes
+        assert any('modes' in record.message.lower() for record in caplog.records)
+        # Should still fill with first mode
+        assert result['bimodal'].isna().sum() == 0
 
     def test_remove_duplicates_logging(self):
         """Test that duplicate removal includes logging."""

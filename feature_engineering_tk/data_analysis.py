@@ -76,12 +76,14 @@ class DataAnalyzer(FeatureEngineeringBase):
             unique_count = self.df[col].nunique()
             if unique_count <= max_unique:
                 top_value = self.df[col].mode()[0] if len(self.df[col].mode()) > 0 else None
+                # Check if value_counts is empty before accessing .iloc[0]
+                value_counts = self.df[col].value_counts()
                 summary.append({
                     'column': col,
                     'unique_count': unique_count,
                     'top_value': top_value,
-                    'top_value_freq': self.df[col].value_counts().iloc[0] if unique_count > 0 else 0,
-                    'top_value_percent': (self.df[col].value_counts().iloc[0] / len(self.df) * 100) if unique_count > 0 else 0
+                    'top_value_freq': value_counts.iloc[0] if len(value_counts) > 0 else 0,
+                    'top_value_percent': (value_counts.iloc[0] / len(self.df) * 100) if len(value_counts) > 0 else 0
                 })
 
         return pd.DataFrame(summary)

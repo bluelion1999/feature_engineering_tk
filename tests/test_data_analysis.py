@@ -251,6 +251,31 @@ class TestDataAnalyzer:
         # Should return empty DataFrame
         assert binning.empty
 
+    def test_get_categorical_summary_with_all_nan_column(self):
+        """Test categorical summary with column containing only NaN values (Bug #3).
+
+        Bug #3: Lines 85-86 used unique_count > 0 check instead of checking
+        if value_counts() is empty, which could cause IndexError in edge cases.
+        """
+        # Use dtype=object to ensure column is treated as categorical
+        df = pd.DataFrame({
+            'all_nan': pd.Series([np.nan, np.nan, np.nan], dtype=object),
+            'normal': ['A', 'B', 'C']
+        })
+        analyzer = DataAnalyzer(df)
+
+        # Should not crash with IndexError on empty value_counts
+        result = analyzer.get_categorical_summary(max_unique=10)
+
+        # All-NaN column should be handled gracefully (included with 0 values)
+        all_nan_row = result[result['column'] == 'all_nan']
+        assert len(all_nan_row) == 1, "All-NaN column should be included in summary"
+        all_nan_info = all_nan_row.iloc[0]
+        assert all_nan_info['unique_count'] == 0
+        assert all_nan_info['top_value'] is None or pd.isna(all_nan_info['top_value'])
+        assert all_nan_info['top_value_freq'] == 0
+        assert all_nan_info['top_value_percent'] == 0
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

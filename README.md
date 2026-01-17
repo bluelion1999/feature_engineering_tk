@@ -370,6 +370,26 @@ See [CHANGELOG.md](CHANGELOG.md) for full list of changes.
 - **preprocessing.py**: Data cleaning and preprocessing
 - **feature_selection.py**: Feature selection methods
 
+## Examples & Tutorials
+
+### 📓 Jupyter Notebooks
+
+We provide two comprehensive Jupyter notebooks to help you get started:
+
+**Quick Start Guide** ([examples/quickstart.ipynb](examples/quickstart.ipynb))
+- 15-minute introduction to the toolkit
+- Complete customer churn prediction example
+- Covers EDA, cleaning, feature engineering, selection, and insights
+- Perfect for first-time users
+
+**In-Depth Tutorial** ([examples/tutorial_indepth.ipynb](examples/tutorial_indepth.ipynb))
+- Comprehensive guide with multiple real-world examples
+- Real estate prices, customer data, e-commerce transactions, insurance claims
+- Advanced techniques: statistical robustness, production patterns, edge cases
+- Complete end-to-end pipeline demonstrations
+
+Both notebooks are self-contained with synthetic data, so you can run them immediately without external files.
+
 ## Quick Start
 
 ```python

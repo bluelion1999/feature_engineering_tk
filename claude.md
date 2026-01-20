@@ -9,12 +9,26 @@
 - **Repository**: https://github.com/bluelion1999/feature_engineering_tk
 - **Default Branch**: master
 - **Python Version**: 3.8+
-- **Current Version**: 2.4.2
-- **Last Major Enhancement**: 2026-01-15 (Bug Fixes)
+- **Current Version**: 2.4.3
+- **Last Major Enhancement**: 2026-01-20 (Pandas Compatibility Fix)
 
 ---
 
 ## Recent Major Changes
+
+### Version 2.4.3 Release (2026-01-20)
+**Status**: Completed
+**Focus**: Pandas 2.x compatibility fix
+
+#### Bug Fix
+- **Fixed pandas 2.x compatibility** in `DataAnalyzer.get_basic_info()` - resolved ValueError when constructing DataFrame with columns of different lengths
+- Updated method to wrap all values in single-element lists for consistent DataFrame construction
+- Updated corresponding test to access values with [0] index
+- All 218 tests passing
+
+**Benefits**: Full compatibility with pandas 2.x, eliminating DataFrame construction errors in modern pandas environments
+
+---
 
 ### Version 2.4.2 Release (2026-01-20)
 **Status**: Completed on fly_catcher branch

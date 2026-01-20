@@ -1,4 +1,4 @@
-# Feature Engineering Toolkit v2.4.2
+# Feature Engineering Toolkit v2.4.3
 
 [![PyPI version](https://badge.fury.io/py/feature-engineering-tk.svg)](https://badge.fury.io/py/feature-engineering-tk)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -30,6 +30,12 @@ pip install feature-engineering-tk
 ```
 
 **Requirements:** Python 3.8+
+
+## What's New in v2.4.3
+
+**Pandas Compatibility Fix:**
+
+- **Fixed pandas 2.x compatibility** in `get_basic_info()` method - resolved DataFrame construction error with arrays of different lengths
 
 ## What's New in v2.4.2
 

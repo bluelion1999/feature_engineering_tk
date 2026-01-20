@@ -24,7 +24,7 @@ from .exceptions import (
 )
 from . import statistical_utils
 
-__version__ = '2.4.2'
+__version__ = '2.4.3'
 
 __all__ = [
     # Main Classes

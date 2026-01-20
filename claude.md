@@ -9,14 +9,14 @@
 - **Repository**: https://github.com/bluelion1999/feature_engineering_tk
 - **Default Branch**: master
 - **Python Version**: 3.8+
-- **Current Version**: 2.4.1
+- **Current Version**: 2.4.2
 - **Last Major Enhancement**: 2026-01-15 (Bug Fixes)
 
 ---
 
 ## Recent Major Changes
 
-### Version 2.4.1 Release (2026-01-15)
+### Version 2.4.2 Release (2026-01-20)
 **Status**: Completed on fly_catcher branch
 **Focus**: Critical bug fixes using test-driven development
 

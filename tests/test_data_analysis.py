@@ -64,8 +64,8 @@ class TestDataAnalyzer:
         analyzer = DataAnalyzer(sample_df)
         info = analyzer.get_basic_info()
 
-        assert info['shape'] == (5, 4)
-        assert len(info['columns']) == 4
+        assert info['shape'][0] == (5, 4)
+        assert len(info['columns'][0]) == 4
         assert 'duplicates' in info
         assert 'memory_usage_mb' in info
 

@@ -34,11 +34,11 @@ class DataAnalyzer(FeatureEngineeringBase):
     def get_basic_info(self) -> pd.DataFrame:
         """Get basic information about the dataframe."""
         return pd.DataFrame({
-            'shape': self.df.shape,
-            'columns': list(self.df.columns),
-            'dtypes': self.df.dtypes.to_dict(),
-            'memory_usage_mb': self.df.memory_usage(deep=True).sum() / 1024**2,
-            'duplicates': self.df.duplicated().sum()
+            'shape': [self.df.shape],
+            'columns': [list(self.df.columns)],
+            'dtypes': [self.df.dtypes.to_dict()],
+            'memory_usage_mb': [self.df.memory_usage(deep=True).sum() / 1024**2],
+            'duplicates': [self.df.duplicated().sum()]
         })
 
     def get_missing_summary(self) -> pd.DataFrame:

@@ -347,4 +347,4 @@ def select_features_auto(df: pd.DataFrame,
         logger.info(f"  {i}. {feat}")
 
     result_df = selector_final.apply_selection(final_features, keep_target=True)
-    return result_df
+    return result_df, selector_final

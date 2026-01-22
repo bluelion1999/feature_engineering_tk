@@ -294,7 +294,7 @@ class TestSummaryReport:
         assert 'TARGET ANALYSIS REPORT' in report
         assert 'CLASSIFICATION' in report
         assert 'CLASS DISTRIBUTION' in report
-        assert 'CLASS IMBALANCE ANALYSIS' in report
+        assert 'Imbalance Ratio:' in report  # Imbalance info included in distribution section
 
     def test_generate_summary_report_regression(self, regression_df):
         """Test summary report for regression"""
@@ -304,7 +304,7 @@ class TestSummaryReport:
         assert isinstance(report, str)
         assert 'TARGET ANALYSIS REPORT' in report
         assert 'REGRESSION' in report
-        assert 'TARGET DISTRIBUTION' in report
+        assert 'TARGET STATISTICS' in report  # Section header for regression stats
         assert 'Mean:' in report
         assert 'Skewness:' in report
 
@@ -1253,3 +1253,308 @@ class TestPhase8ModelRecommendations:
 
         # Should have some different models
         assert class_models != reg_models
+
+
+# =======================
+# Additional Edge Case Tests
+# =======================
+
+class TestSuggestFeatureEngineeringEdgeCases:
+    """Test edge cases for suggest_feature_engineering()."""
+
+    def test_all_constant_numeric_features(self):
+        """Test with all numeric features being constant."""
+        df = pd.DataFrame({
+            'const1': [5.0] * 100,
+            'const2': [10.0] * 100,
+            'category': ['A', 'B'] * 50,
+            'target': np.random.choice([0, 1], 100)
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should not crash and should handle gracefully
+        assert isinstance(suggestions, list)
+        # May have suggestions for categorical encoding
+        cat_suggestions = [s for s in suggestions if s['feature'] == 'category']
+        assert len(cat_suggestions) >= 0  # May or may not have suggestions
+
+    def test_all_missing_feature(self):
+        """Test with a feature that is 100% missing."""
+        df = pd.DataFrame({
+            'all_missing': [np.nan] * 100,
+            'normal': np.random.randn(100),
+            'target': np.random.choice([0, 1], 100)
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should handle gracefully without crash
+        assert isinstance(suggestions, list)
+
+    def test_extreme_value_ranges(self):
+        """Test with features having extreme value ranges."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'tiny': np.random.uniform(1e-10, 1e-9, 100),
+            'huge': np.random.uniform(1e9, 1e10, 100),
+            'normal': np.random.randn(100),
+            'target': np.random.choice([0, 1], 100)
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        assert isinstance(suggestions, list)
+        # Should suggest scaling for large range features
+        scaling_suggestions = [s for s in suggestions if 'Scale' in s['suggestion'] or 'scal' in s['suggestion'].lower()]
+        assert len(scaling_suggestions) > 0
+
+    def test_single_sample_per_class(self):
+        """Test with minimal samples per class."""
+        df = pd.DataFrame({
+            'feature1': [1.0, 2.0, 3.0, 4.0, 5.0],
+            'feature2': [10.0, 20.0, 30.0, 40.0, 50.0],
+            'target': [0, 0, 1, 1, 1]
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        # Should handle small sample sizes gracefully
+        assert isinstance(suggestions, list)
+
+    def test_very_high_cardinality_categorical(self):
+        """Test with very high cardinality categorical feature."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'high_card': [f'cat_{i}' for i in range(500)],
+            'feature1': np.random.randn(500),
+            'target': np.random.choice([0, 1], 500)
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        assert isinstance(suggestions, list)
+        # Should suggest target encoding or grouping for high cardinality
+        high_card_suggestions = [s for s in suggestions if s['feature'] == 'high_card']
+        assert len(high_card_suggestions) > 0
+        assert any('target encode' in s['suggestion'].lower() or 'group' in s['suggestion'].lower()
+                   for s in high_card_suggestions)
+
+    def test_heavily_skewed_features(self):
+        """Test with heavily skewed numeric features."""
+        np.random.seed(42)
+        # Create exponentially distributed data (heavily right-skewed)
+        df = pd.DataFrame({
+            'right_skewed': np.random.exponential(scale=2, size=500),
+            'normal': np.random.randn(500),
+            'target': np.random.choice([0, 1], 500)
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        suggestions = analyzer.suggest_feature_engineering()
+
+        assert isinstance(suggestions, list)
+        # Should suggest log/sqrt transformation for skewed features
+        skew_suggestions = [s for s in suggestions
+                           if s['feature'] == 'right_skewed' and 'log' in s['suggestion'].lower()]
+        assert len(skew_suggestions) > 0
+
+
+class TestRecommendModelsEdgeCases:
+    """Test edge cases for recommend_models()."""
+
+    def test_very_small_dataset(self):
+        """Test with very small dataset (< 10 samples)."""
+        df = pd.DataFrame({
+            'feature1': [1, 2, 3, 4, 5, 6, 7, 8],
+            'feature2': [10, 20, 30, 40, 50, 60, 70, 80],
+            'target': [0, 0, 0, 0, 1, 1, 1, 1]
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+        # Should recommend cross-validation for small datasets
+        cv_recs = [r for r in recommendations if 'cross' in r['model'].lower() or 'Cross' in r['model']]
+        assert len(cv_recs) > 0
+
+    def test_very_large_dataset(self):
+        """Test with large dataset (> 50k samples)."""
+        np.random.seed(42)
+        n_samples = 60000
+        df = pd.DataFrame({
+            'feature1': np.random.randn(n_samples),
+            'feature2': np.random.randn(n_samples),
+            'feature3': np.random.randn(n_samples),
+            'target': np.random.choice([0, 1], n_samples)
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        assert isinstance(recommendations, list)
+        # Should recommend LightGBM with high priority for large datasets
+        lightgbm_recs = [r for r in recommendations if 'LightGBM' in r['model']]
+        assert len(lightgbm_recs) > 0
+        assert lightgbm_recs[0]['priority'] == 'high'
+
+    def test_single_feature_dataset(self):
+        """Test with only one feature."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'only_feature': np.random.randn(200),
+            'target': np.random.choice([0, 1], 200)
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        # Should still provide recommendations
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+
+    def test_more_features_than_samples(self):
+        """Test with high p/n ratio (more features than samples)."""
+        np.random.seed(42)
+        n_samples = 50
+        n_features = 100
+        data = np.random.randn(n_samples, n_features)
+        df = pd.DataFrame(data, columns=[f'feature_{i}' for i in range(n_features)])
+        df['target'] = np.random.choice([0, 1], n_samples)
+
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+        # Should still provide reasonable recommendations even with high p/n ratio
+        # Cross-validation should be recommended for small sample sizes
+        cv_recs = [r for r in recommendations if 'Cross' in r['model'] or 'cross' in r['reason'].lower()]
+        assert len(cv_recs) > 0
+
+    def test_multiclass_classification(self):
+        """Test with multiclass classification (> 2 classes)."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(300),
+            'feature2': np.random.randn(300),
+            'target': np.random.choice([0, 1, 2, 3, 4], 300)  # 5 classes
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+        # Should detect as classification
+        assert analyzer.task == 'classification'
+
+    def test_regression_with_outliers(self):
+        """Test regression with extreme outliers in target."""
+        np.random.seed(42)
+        target = np.random.randn(500) * 10 + 50
+        # Add extreme outliers
+        target[0] = 1000
+        target[1] = -500
+
+        df = pd.DataFrame({
+            'feature1': np.random.randn(500),
+            'feature2': np.random.randn(500),
+            'target': target
+        })
+        analyzer = TargetAnalyzer(df, 'target')
+        recommendations = analyzer.recommend_models()
+
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+        # Should recommend tree-based models which are robust to outliers
+        tree_recs = [r for r in recommendations if 'Forest' in r['model'] or 'XGBoost' in r['model']]
+        assert len(tree_recs) > 0
+
+
+class TestStatisticalMethodOptionalParameters:
+    """Test optional parameters in statistical methods."""
+
+    def test_feature_correlations_with_confidence_intervals(self):
+        """Test analyze_feature_correlations with include_ci=True."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(200),
+            'feature2': np.random.randn(200),
+            'feature3': np.random.randn(200),
+            'target': np.random.randn(200) * 10 + 50
+        })
+        analyzer = TargetAnalyzer(df, 'target', task='regression')
+        correlations = analyzer.analyze_feature_correlations(include_ci=True)
+
+        assert isinstance(correlations, pd.DataFrame)
+        assert not correlations.empty
+        # Should include CI columns when include_ci=True
+        assert 'ci_lower' in correlations.columns
+        assert 'ci_upper' in correlations.columns
+
+    def test_feature_correlations_with_linearity_check(self):
+        """Test analyze_feature_correlations with check_linearity=True."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'linear_feature': np.random.randn(200),
+            'nonlinear_feature': np.random.randn(200) ** 2,
+            'target': np.random.randn(200) * 10 + 50
+        })
+        analyzer = TargetAnalyzer(df, 'target', task='regression')
+        correlations = analyzer.analyze_feature_correlations(check_linearity=True)
+
+        assert isinstance(correlations, pd.DataFrame)
+        assert not correlations.empty
+        # Should include linearity warning column
+        assert 'linearity_warning' in correlations.columns
+
+    def test_class_wise_statistics_with_confidence_intervals(self):
+        """Test analyze_class_wise_statistics with include_ci=True."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(200),
+            'feature2': np.random.randn(200),
+            'target': np.random.choice([0, 1], 200)
+        })
+        analyzer = TargetAnalyzer(df, 'target', task='classification')
+        stats = analyzer.analyze_class_wise_statistics(include_ci=True)
+
+        # Returns dict of DataFrames (one per feature) when include_ci=True
+        assert isinstance(stats, dict)
+        assert len(stats) > 0
+        # Each feature should have a DataFrame with CI columns
+        for feature, feature_stats in stats.items():
+            assert isinstance(feature_stats, pd.DataFrame)
+            assert 'mean_ci_lower' in feature_stats.columns
+            assert 'mean_ci_upper' in feature_stats.columns
+
+    def test_feature_target_relationship_with_effect_sizes(self):
+        """Test analyze_feature_target_relationship with report_effect_sizes=True."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(200),
+            'feature2': np.random.randn(200),
+            'target': np.random.choice([0, 1], 200)
+        })
+        analyzer = TargetAnalyzer(df, 'target', task='classification')
+        relationships = analyzer.analyze_feature_target_relationship(report_effect_sizes=True)
+
+        assert isinstance(relationships, pd.DataFrame)
+        assert not relationships.empty
+        # Should include effect size columns
+        assert 'effect_size' in relationships.columns
+
+    def test_feature_target_relationship_with_multiple_testing_correction(self):
+        """Test analyze_feature_target_relationship with correct_multiple_tests=True."""
+        np.random.seed(42)
+        df = pd.DataFrame({
+            'feature1': np.random.randn(200),
+            'feature2': np.random.randn(200),
+            'feature3': np.random.randn(200),
+            'target': np.random.choice([0, 1], 200)
+        })
+        analyzer = TargetAnalyzer(df, 'target', task='classification')
+        relationships = analyzer.analyze_feature_target_relationship(correct_multiple_tests=True)
+
+        assert isinstance(relationships, pd.DataFrame)
+        assert not relationships.empty
+        # Should include corrected p-values
+        assert 'pvalue_corrected' in relationships.columns

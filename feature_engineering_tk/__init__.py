@@ -5,7 +5,8 @@ Provides intelligent automation for ML workflows including preprocessing, featur
 statistical analysis, and model recommendations.
 """
 
-from .data_analysis import DataAnalyzer, TargetAnalyzer, quick_analysis
+from .data_analysis import DataAnalyzer, quick_analysis
+from .target_analyzer import TargetAnalyzer
 from .feature_engineering import FeatureEngineer
 from .preprocessing import DataPreprocessor
 from .feature_selection import FeatureSelector, select_features_auto

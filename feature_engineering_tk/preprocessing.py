@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import logging
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, Callable
 from datetime import datetime
 
 from .base import FeatureEngineeringBase
@@ -539,7 +539,7 @@ class DataPreprocessor(FeatureEngineeringBase):
             return self
         return df_result
 
-    def filter_rows(self, condition: Union[pd.Series, callable],
+    def filter_rows(self, condition: Union[pd.Series, Callable],
                     inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Filter rows based on a condition.
@@ -677,7 +677,7 @@ class DataPreprocessor(FeatureEngineeringBase):
             return self
         return df_result
 
-    def apply_custom_function(self, column: str, func: callable,
+    def apply_custom_function(self, column: str, func: Callable,
                                new_column: Optional[str] = None,
                                inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """

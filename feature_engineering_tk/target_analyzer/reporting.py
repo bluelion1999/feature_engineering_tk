@@ -112,131 +112,356 @@ class ReportingMixin:
             json.dump(report_data, f, indent=2, default=str)
 
     def _export_markdown(self, filepath: str, report_data: Dict[str, Any]) -> None:
-        """Export report as Markdown."""
+        """Export report as Markdown with table of contents and callout boxes."""
         lines = []
 
         # Header
-        lines.append(f"# Target Analysis Report")
-        lines.append(f"\n**Generated**: {report_data['timestamp']}")
-        lines.append(f"\n**Task Type**: {report_data['task'].upper()}")
-        lines.append(f"\n**Target Column**: {report_data['task_info']['target_column']}")
-        lines.append(f"\n---\n")
+        lines.append("# Target Analysis Report")
+        lines.append("")
+        lines.append(f"**Generated**: {report_data['timestamp']}")
+        lines.append(f"**Task Type**: {report_data['task'].upper()}")
+        lines.append(f"**Target Column**: {report_data['task_info']['target_column']}")
+        lines.append("")
+
+        # Table of Contents
+        lines.append("## Table of Contents")
+        lines.append("")
+        lines.append("- [Task Information](#task-information)")
+        lines.append("- [Distribution Analysis](#distribution-analysis)")
+        if report_data['relationships']:
+            lines.append("- [Feature-Target Relationships](#feature-target-relationships)")
+        if report_data['data_quality']:
+            lines.append("- [Data Quality](#data-quality)")
+        if report_data['vif']:
+            lines.append("- [Multicollinearity (VIF)](#multicollinearity-vif)")
+        lines.append("- [Recommendations](#recommendations)")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
 
         # Task Info
         lines.append("## Task Information")
-        lines.append(f"- **Data Type**: {report_data['task_info']['target_dtype']}")
-        lines.append(f"- **Unique Values**: {report_data['task_info']['unique_values']}")
-        lines.append(f"- **Missing Values**: {report_data['task_info']['missing_count']} ({report_data['task_info']['missing_percent']:.2f}%)")
+        lines.append("")
+        lines.append(f"| Property | Value |")
+        lines.append("|----------|-------|")
+        lines.append(f"| Data Type | {report_data['task_info']['target_dtype']} |")
+        lines.append(f"| Unique Values | {report_data['task_info']['unique_values']} |")
+        lines.append(f"| Missing Values | {report_data['task_info']['missing_count']} ({report_data['task_info']['missing_percent']:.2f}%) |")
 
         if report_data['task'] == 'classification':
-            lines.append(f"- **Number of Classes**: {report_data['task_info']['class_count']}")
-            lines.append(f"- **Classes**: {', '.join(map(str, report_data['task_info']['classes']))}")
+            lines.append(f"| Number of Classes | {report_data['task_info']['class_count']} |")
+            lines.append(f"| Classes | {', '.join(map(str, report_data['task_info']['classes']))} |")
 
-        lines.append("\n---\n")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
 
         # Distribution
         lines.append("## Distribution Analysis")
+        lines.append("")
         if report_data['task'] == 'classification' and report_data['distribution']:
-            lines.append("\n### Class Distribution")
+            lines.append("### Class Distribution")
+            lines.append("")
             lines.append("| Class | Count | Percentage | Imbalance Ratio |")
-            lines.append("|-------|-------|------------|-----------------|")
+            lines.append("|-------|------:|----------:|--------------:|")
             for item in report_data['distribution']:
                 lines.append(f"| {item['class']} | {item['count']} | {item['percentage']:.2f}% | {item['imbalance_ratio']:.2f} |")
+            lines.append("")
 
             if report_data['imbalance']:
-                lines.append(f"\n**Imbalance Severity**: {report_data['imbalance']['severity'].upper()}")
-                lines.append(f"\n**Recommendation**: {report_data['imbalance']['recommendation']}")
+                severity = report_data['imbalance']['severity']
+                if severity == 'severe':
+                    lines.append("> **Warning**: Severe class imbalance detected!")
+                    lines.append(">")
+                    lines.append(f"> - **Severity**: {severity.upper()}")
+                    lines.append(f"> - **Recommendation**: {report_data['imbalance']['recommendation']}")
+                elif severity == 'moderate':
+                    lines.append("> **Note**: Moderate class imbalance detected.")
+                    lines.append(">")
+                    lines.append(f"> - **Severity**: {severity.upper()}")
+                    lines.append(f"> - **Recommendation**: {report_data['imbalance']['recommendation']}")
+                else:
+                    lines.append("> **OK**: Classes are well balanced.")
+                lines.append("")
 
         elif report_data['task'] == 'regression' and report_data['distribution']:
-            lines.append("\n### Target Statistics")
+            lines.append("### Target Statistics")
+            lines.append("")
             dist = report_data['distribution']
-            lines.append(f"- **Mean**: {dist['mean']:.4f}")
-            lines.append(f"- **Median**: {dist['median']:.4f}")
-            lines.append(f"- **Std Dev**: {dist['std']:.4f}")
-            lines.append(f"- **Skewness**: {dist['skewness']:.4f}")
-            lines.append(f"- **Kurtosis**: {dist['kurtosis']:.4f}")
+            lines.append("| Statistic | Value |")
+            lines.append("|-----------|------:|")
+            lines.append(f"| Mean | {dist['mean']:.4f} |")
+            lines.append(f"| Median | {dist['median']:.4f} |")
+            lines.append(f"| Std Dev | {dist['std']:.4f} |")
+            lines.append(f"| Skewness | {dist['skewness']:.4f} |")
+            lines.append(f"| Kurtosis | {dist['kurtosis']:.4f} |")
+            lines.append("")
 
-        lines.append("\n---\n")
+            # Add skewness warning
+            skew = dist.get('skewness', 0)
+            if abs(skew) > 2:
+                lines.append("> **Warning**: Target is highly skewed (skewness = {:.2f})".format(skew))
+                lines.append(">")
+                lines.append("> Consider applying log transformation before modeling.")
+            elif abs(skew) > 1:
+                lines.append("> **Note**: Target is moderately skewed (skewness = {:.2f})".format(skew))
+                lines.append(">")
+                lines.append("> Transformation may improve model performance.")
+            lines.append("")
+
+        lines.append("---")
+        lines.append("")
 
         # Relationships
         if report_data['relationships']:
             lines.append("## Feature-Target Relationships")
-            lines.append("\n### Top 10 Most Significant Features")
+            lines.append("")
+            lines.append("### Top 10 Most Significant Features")
+            lines.append("")
             lines.append("| Feature | Test Type | Statistic | P-Value | Significant |")
-            lines.append("|---------|-----------|-----------|---------|-------------|")
+            lines.append("|---------|-----------|----------:|--------:|:-----------:|")
             for item in report_data['relationships'][:10]:
-                sig = "✓" if item['significant'] else "✗"
+                sig = "Yes" if item['significant'] else "No"
                 lines.append(f"| {item['feature']} | {item['test_type']} | {item['statistic']:.4f} | {item['pvalue']:.4e} | {sig} |")
-            lines.append("\n---\n")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
 
         # Data Quality
         if report_data['data_quality']:
             lines.append("## Data Quality")
+            lines.append("")
             quality = report_data['data_quality']
 
             if quality['missing_values']:
-                lines.append("\n### Features with Missing Values")
+                lines.append("### Features with Missing Values")
+                lines.append("")
                 lines.append("| Feature | Missing Count | Missing % |")
-                lines.append("|---------|---------------|-----------|")
+                lines.append("|---------|-------------:|----------:|")
                 for feat, info in quality['missing_values'].items():
                     lines.append(f"| {feat} | {info['count']} | {info['percent']:.2f}% |")
+                lines.append("")
+            else:
+                lines.append("> **OK**: No missing values detected.")
+                lines.append("")
 
             if quality['constant_features']:
-                lines.append(f"\n### Constant Features: {', '.join(quality['constant_features'])}")
+                lines.append("### Constant Features")
+                lines.append("")
+                lines.append("> **Warning**: The following features have constant values and should be removed:")
+                lines.append(">")
+                for feat in quality['constant_features']:
+                    lines.append(f"> - {feat}")
+                lines.append("")
 
             if quality['leakage_suspects']:
-                lines.append("\n### Potential Data Leakage")
+                lines.append("### Potential Data Leakage")
+                lines.append("")
+                lines.append("> **Warning**: Potential data leakage detected!")
+                lines.append(">")
                 for suspect in quality['leakage_suspects']:
-                    lines.append(f"- **{suspect['feature']}**: {suspect['reason']} (Severity: {suspect['severity']})")
+                    lines.append(f"> - **{suspect['feature']}**: {suspect['reason']} (Severity: {suspect['severity']})")
+                lines.append("")
 
-            lines.append("\n---\n")
+            lines.append("---")
+            lines.append("")
 
         # VIF
         if report_data['vif']:
             lines.append("## Multicollinearity (VIF)")
-            lines.append("\n### Features with High VIF (>10)")
+            lines.append("")
             high_vif = [item for item in report_data['vif'] if item['VIF'] > 10]
             if high_vif:
+                lines.append("> **Warning**: High multicollinearity detected in the following features:")
+                lines.append("")
                 lines.append("| Feature | VIF |")
-                lines.append("|---------|-----|")
+                lines.append("|---------|----:|")
                 for item in high_vif:
                     lines.append(f"| {item['feature']} | {item['VIF']:.2f} |")
+                lines.append("")
+                lines.append("*Features with VIF > 10 indicate high multicollinearity. Consider removing or combining these features.*")
             else:
-                lines.append("No features with high multicollinearity detected.")
-            lines.append("\n---\n")
+                lines.append("> **OK**: No features with high multicollinearity detected (VIF < 10).")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
 
         # Recommendations
         lines.append("## Recommendations")
-        for rec in report_data['recommendations']:
-            lines.append(f"- {rec}")
+        lines.append("")
+        if report_data['recommendations']:
+            for i, rec in enumerate(report_data['recommendations'], 1):
+                lines.append(f"{i}. {rec}")
+        else:
+            lines.append("No specific recommendations at this time.")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("*Report generated by Feature Engineering Toolkit*")
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write('\n'.join(lines))
 
     def _export_html(self, filepath: str, report_data: Dict[str, Any]) -> None:
-        """Export report as HTML."""
+        """Export report as HTML with collapsible sections and improved styling."""
         html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Target Analysis Report</title>
     <style>
-        body {{ font-family: Arial, sans-serif; max-width: 1200px; margin: 40px auto; padding: 20px; }}
-        h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
-        h2 {{ color: #34495e; border-bottom: 2px solid #95a5a6; padding-bottom: 8px; margin-top: 30px; }}
-        h3 {{ color: #7f8c8d; }}
-        table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
-        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
-        th {{ background-color: #3498db; color: white; }}
-        tr:nth-child(even) {{ background-color: #f2f2f2; }}
-        .info-box {{ background-color: #f8f9fa; border-left: 4px solid #3498db; padding: 15px; margin: 15px 0; }}
-        .warning-box {{ background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0; }}
-        .success-box {{ background-color: #d4edda; border-left: 4px solid #28a745; padding: 15px; margin: 15px 0; }}
-        .recommendation {{ padding: 10px; margin: 5px 0; background-color: #e9ecef; border-radius: 5px; }}
+        :root {{
+            --primary: #3498db;
+            --secondary: #2c3e50;
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+            --light: #f8f9fa;
+            --border: #dee2e6;
+        }}
+        * {{ box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }}
+        h1 {{
+            color: var(--secondary);
+            border-bottom: 3px solid var(--primary);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }}
+        /* Collapsible sections */
+        details {{
+            margin: 15px 0;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }}
+        summary {{
+            background: var(--light);
+            padding: 15px 20px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1.1em;
+            color: var(--secondary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }}
+        summary:hover {{ background: #e9ecef; }}
+        summary::after {{
+            content: '+';
+            font-size: 1.2em;
+            font-weight: bold;
+            color: var(--primary);
+        }}
+        details[open] summary::after {{ content: '-'; }}
+        details[open] summary {{ border-bottom: 1px solid var(--border); }}
+        .section-content {{ padding: 20px; }}
+        /* Tables */
+        table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+            font-size: 0.95em;
+        }}
+        th, td {{
+            border: 1px solid var(--border);
+            padding: 10px 12px;
+            text-align: left;
+        }}
+        th {{
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }}
+        tr:nth-child(even) {{ background-color: #f8f9fa; }}
+        tr:hover {{ background-color: #e9ecef; }}
+        td.number {{ text-align: right; font-family: monospace; }}
+        /* Alert boxes */
+        .info-box {{
+            background-color: #e7f3ff;
+            border-left: 4px solid var(--primary);
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }}
+        .warning-box {{
+            background-color: #fff3cd;
+            border-left: 4px solid var(--warning);
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }}
+        .success-box {{
+            background-color: #d4edda;
+            border-left: 4px solid var(--success);
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }}
+        .danger-box {{
+            background-color: #f8d7da;
+            border-left: 4px solid var(--danger);
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }}
+        /* Recommendations */
+        .recommendation {{
+            padding: 12px 15px;
+            margin: 8px 0;
+            background-color: var(--light);
+            border-radius: 6px;
+            border-left: 3px solid var(--primary);
+        }}
+        .recommendation:hover {{ background-color: #e9ecef; }}
+        /* Badge styles */
+        .badge {{
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }}
+        .badge-success {{ background: #d4edda; color: #155724; }}
+        .badge-warning {{ background: #fff3cd; color: #856404; }}
+        .badge-danger {{ background: #f8d7da; color: #721c24; }}
+        /* Quick stats */
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }}
+        .stat-card {{
+            background: var(--light);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }}
+        .stat-value {{ font-size: 1.5em; font-weight: bold; color: var(--primary); }}
+        .stat-label {{ font-size: 0.9em; color: #666; margin-top: 5px; }}
+        /* Print styles */
+        @media print {{
+            details {{ border: none; }}
+            summary {{ background: none; }}
+            details[open] summary {{ border-bottom: 1px solid #ccc; }}
+            .section-content {{ padding: 10px 0; }}
+        }}
     </style>
 </head>
 <body>
     <h1>Target Analysis Report</h1>
+
     <div class="info-box">
         <strong>Generated:</strong> {report_data['timestamp']}<br>
         <strong>Task Type:</strong> {report_data['task'].upper()}<br>
@@ -244,45 +469,149 @@ class ReportingMixin:
     </div>
 """
 
-        # Add sections based on report data
-        html += "<h2>Task Information</h2>"
-        html += f"<p><strong>Data Type:</strong> {report_data['task_info']['target_dtype']}</p>"
-        html += f"<p><strong>Unique Values:</strong> {report_data['task_info']['unique_values']}</p>"
-        html += f"<p><strong>Missing:</strong> {report_data['task_info']['missing_count']} ({report_data['task_info']['missing_percent']:.2f}%)</p>"
-
+        # Quick stats grid
+        html += '<div class="stats-grid">'
+        html += f'<div class="stat-card"><div class="stat-value">{report_data["task_info"]["unique_values"]}</div><div class="stat-label">Unique Values</div></div>'
+        html += f'<div class="stat-card"><div class="stat-value">{report_data["task_info"]["missing_percent"]:.1f}%</div><div class="stat-label">Missing</div></div>'
         if report_data['task'] == 'classification':
-            html += f"<p><strong>Classes:</strong> {len(report_data['task_info']['classes'])}</p>"
+            html += f'<div class="stat-card"><div class="stat-value">{report_data["task_info"]["class_count"]}</div><div class="stat-label">Classes</div></div>'
+        html += '</div>'
 
-            if report_data['distribution']:
-                html += "<h2>Class Distribution</h2>"
-                html += "<table><tr><th>Class</th><th>Count</th><th>Percentage</th><th>Imbalance Ratio</th></tr>"
-                for item in report_data['distribution']:
-                    html += f"<tr><td>{item['class']}</td><td>{item['count']}</td><td>{item['percentage']:.2f}%</td><td>{item['imbalance_ratio']:.2f}</td></tr>"
-                html += "</table>"
+        # Task Information (collapsible)
+        html += '<details open>'
+        html += '<summary>Task Information</summary>'
+        html += '<div class="section-content">'
+        html += '<table>'
+        html += '<tr><th>Property</th><th>Value</th></tr>'
+        html += f'<tr><td>Data Type</td><td>{report_data["task_info"]["target_dtype"]}</td></tr>'
+        html += f'<tr><td>Unique Values</td><td class="number">{report_data["task_info"]["unique_values"]}</td></tr>'
+        html += f'<tr><td>Missing Values</td><td class="number">{report_data["task_info"]["missing_count"]} ({report_data["task_info"]["missing_percent"]:.2f}%)</td></tr>'
+        if report_data['task'] == 'classification':
+            html += f'<tr><td>Number of Classes</td><td class="number">{report_data["task_info"]["class_count"]}</td></tr>'
+            html += f'<tr><td>Classes</td><td>{", ".join(map(str, report_data["task_info"]["classes"]))}</td></tr>'
+        html += '</table>'
+        html += '</div></details>'
+
+        # Distribution (collapsible)
+        if report_data['task'] == 'classification' and report_data['distribution']:
+            html += '<details open>'
+            html += '<summary>Class Distribution</summary>'
+            html += '<div class="section-content">'
+            html += '<table>'
+            html += '<tr><th>Class</th><th>Count</th><th>Percentage</th><th>Imbalance Ratio</th></tr>'
+            for item in report_data['distribution']:
+                html += f'<tr><td>{item["class"]}</td><td class="number">{item["count"]}</td><td class="number">{item["percentage"]:.2f}%</td><td class="number">{item["imbalance_ratio"]:.2f}</td></tr>'
+            html += '</table>'
+
+            if report_data['imbalance']:
+                severity = report_data['imbalance']['severity']
+                if severity == 'severe':
+                    html += f'<div class="danger-box"><strong>Severe Imbalance:</strong> {report_data["imbalance"]["recommendation"]}</div>'
+                elif severity == 'moderate':
+                    html += f'<div class="warning-box"><strong>Moderate Imbalance:</strong> {report_data["imbalance"]["recommendation"]}</div>'
+                else:
+                    html += '<div class="success-box"><strong>Balanced:</strong> Classes are well balanced.</div>'
+            html += '</div></details>'
 
         elif report_data['task'] == 'regression' and report_data['distribution']:
-            html += "<h2>Target Distribution</h2>"
             dist = report_data['distribution']
-            html += f"<p><strong>Mean:</strong> {dist['mean']:.4f}</p>"
-            html += f"<p><strong>Median:</strong> {dist['median']:.4f}</p>"
-            html += f"<p><strong>Std Dev:</strong> {dist['std']:.4f}</p>"
-            html += f"<p><strong>Skewness:</strong> {dist['skewness']:.4f}</p>"
+            html += '<details open>'
+            html += '<summary>Target Distribution</summary>'
+            html += '<div class="section-content">'
+            html += '<table>'
+            html += '<tr><th>Statistic</th><th>Value</th></tr>'
+            html += f'<tr><td>Mean</td><td class="number">{dist["mean"]:.4f}</td></tr>'
+            html += f'<tr><td>Median</td><td class="number">{dist["median"]:.4f}</td></tr>'
+            html += f'<tr><td>Std Dev</td><td class="number">{dist["std"]:.4f}</td></tr>'
+            html += f'<tr><td>Min</td><td class="number">{dist["min"]:.4f}</td></tr>'
+            html += f'<tr><td>Max</td><td class="number">{dist["max"]:.4f}</td></tr>'
+            html += f'<tr><td>Skewness</td><td class="number">{dist["skewness"]:.4f}</td></tr>'
+            html += f'<tr><td>Kurtosis</td><td class="number">{dist["kurtosis"]:.4f}</td></tr>'
+            html += '</table>'
 
-        # Relationships
+            skew = dist.get('skewness', 0)
+            if abs(skew) > 2:
+                html += f'<div class="warning-box"><strong>Highly Skewed:</strong> Consider log transformation (skewness = {skew:.2f})</div>'
+            elif abs(skew) > 1:
+                html += f'<div class="info-box"><strong>Moderately Skewed:</strong> Transformation may improve results (skewness = {skew:.2f})</div>'
+            html += '</div></details>'
+
+        # Relationships (collapsible)
         if report_data['relationships']:
-            html += "<h2>Feature-Target Relationships</h2>"
-            html += "<table><tr><th>Feature</th><th>Test</th><th>Statistic</th><th>P-Value</th><th>Significant</th></tr>"
+            html += '<details>'
+            html += '<summary>Feature-Target Relationships (Top 10)</summary>'
+            html += '<div class="section-content">'
+            html += '<table>'
+            html += '<tr><th>Feature</th><th>Test Type</th><th>Statistic</th><th>P-Value</th><th>Significant</th></tr>'
             for item in report_data['relationships'][:10]:
-                sig = "✓" if item['significant'] else "✗"
-                html += f"<tr><td>{item['feature']}</td><td>{item['test_type']}</td><td>{item['statistic']:.4f}</td><td>{item['pvalue']:.4e}</td><td>{sig}</td></tr>"
-            html += "</table>"
+                sig_badge = '<span class="badge badge-success">Yes</span>' if item['significant'] else '<span class="badge badge-danger">No</span>'
+                html += f'<tr><td>{item["feature"]}</td><td>{item["test_type"]}</td><td class="number">{item["statistic"]:.4f}</td><td class="number">{item["pvalue"]:.4e}</td><td>{sig_badge}</td></tr>'
+            html += '</table>'
+            html += '</div></details>'
 
-        # Recommendations
-        html += "<h2>Recommendations</h2>"
-        for rec in report_data['recommendations']:
-            html += f'<div class="recommendation">{rec}</div>'
+        # Data Quality (collapsible)
+        if report_data['data_quality']:
+            quality = report_data['data_quality']
+            html += '<details>'
+            html += '<summary>Data Quality</summary>'
+            html += '<div class="section-content">'
 
-        html += "</body></html>"
+            if quality['missing_values']:
+                html += '<h4>Missing Values</h4>'
+                html += '<table>'
+                html += '<tr><th>Feature</th><th>Count</th><th>Percent</th></tr>'
+                for feat, info in quality['missing_values'].items():
+                    html += f'<tr><td>{feat}</td><td class="number">{info["count"]}</td><td class="number">{info["percent"]:.2f}%</td></tr>'
+                html += '</table>'
+            else:
+                html += '<div class="success-box">No missing values detected.</div>'
+
+            if quality['constant_features']:
+                html += '<div class="warning-box"><strong>Constant Features (remove these):</strong> ' + ', '.join(quality['constant_features']) + '</div>'
+
+            if quality['leakage_suspects']:
+                html += '<div class="danger-box"><strong>Potential Data Leakage:</strong><ul>'
+                for suspect in quality['leakage_suspects']:
+                    html += f'<li><strong>{suspect["feature"]}:</strong> {suspect["reason"]} (Severity: {suspect["severity"]})</li>'
+                html += '</ul></div>'
+
+            html += '</div></details>'
+
+        # VIF (collapsible)
+        if report_data['vif']:
+            html += '<details>'
+            html += '<summary>Multicollinearity (VIF)</summary>'
+            html += '<div class="section-content">'
+            high_vif = [item for item in report_data['vif'] if item['VIF'] > 10]
+            if high_vif:
+                html += '<div class="warning-box"><strong>High VIF Detected:</strong> Features with VIF &gt; 10 may have multicollinearity issues.</div>'
+                html += '<table>'
+                html += '<tr><th>Feature</th><th>VIF</th></tr>'
+                for item in high_vif:
+                    html += f'<tr><td>{item["feature"]}</td><td class="number">{item["VIF"]:.2f}</td></tr>'
+                html += '</table>'
+            else:
+                html += '<div class="success-box">No high multicollinearity detected (all VIF &lt; 10).</div>'
+            html += '</div></details>'
+
+        # Recommendations (always open)
+        html += '<details open>'
+        html += '<summary>Recommendations</summary>'
+        html += '<div class="section-content">'
+        if report_data['recommendations']:
+            for i, rec in enumerate(report_data['recommendations'], 1):
+                html += f'<div class="recommendation"><strong>{i}.</strong> {rec}</div>'
+        else:
+            html += '<div class="info-box">No specific recommendations at this time.</div>'
+        html += '</div></details>'
+
+        html += """
+    <hr style="margin-top: 30px; border: 0; border-top: 1px solid #dee2e6;">
+    <p style="text-align: center; color: #666; font-size: 0.9em;">
+        Report generated by Feature Engineering Toolkit
+    </p>
+</body>
+</html>"""
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(html)

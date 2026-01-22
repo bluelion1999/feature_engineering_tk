@@ -1118,6 +1118,11 @@ class DataPreprocessor(FeatureEngineeringBase):
         """
         Get a formatted summary of all preprocessing operations.
 
+        Returns a visually organized summary with:
+        - Overview section showing total impact
+        - Timeline visualization of all operations
+        - Shape changes shown with arrows
+
         Returns:
             Formatted string summary of preprocessing history
 
@@ -1128,47 +1133,120 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not self._operation_history:
             return "No preprocessing operations have been performed yet."
 
-        lines = ["=" * 80, "PREPROCESSING SUMMARY", "=" * 80, ""]
-
-        for i, op in enumerate(self._operation_history, 1):
-            lines.append(f"{i}. {op['method'].upper()}")
-            lines.append(f"   Timestamp: {op['timestamp']}")
-            lines.append(f"   Shape: {op['shape_before']} → {op['shape_after']}")
-            lines.append(f"   Rows changed: {op['rows_changed']:+d}, Columns changed: {op['cols_changed']:+d}")
-
-            # Add parameters
-            if op['parameters']:
-                lines.append(f"   Parameters:")
-                for key, value in op['parameters'].items():
-                    if value is not None:
-                        # Truncate long lists for readability
-                        if isinstance(value, list) and len(value) > 5:
-                            value_str = f"{value[:5]}... ({len(value)} total)"
-                        else:
-                            value_str = str(value)
-                        lines.append(f"      - {key}: {value_str}")
-
-            # Add additional details if present
-            if 'details' in op:
-                lines.append(f"   Details:")
-                for key, value in op['details'].items():
-                    lines.append(f"      - {key}: {value}")
-
-            lines.append("")  # Blank line between operations
-
-        # Summary statistics
         total_ops = len(self._operation_history)
         initial_shape = self._operation_history[0]['shape_before']
         final_shape = self._operation_history[-1]['shape_after']
         total_rows_changed = final_shape[0] - initial_shape[0]
         total_cols_changed = final_shape[1] - initial_shape[1]
 
+        # Calculate percentages
+        rows_pct = abs(total_rows_changed) / initial_shape[0] * 100 if initial_shape[0] > 0 else 0
+        cols_pct = abs(total_cols_changed) / initial_shape[1] * 100 if initial_shape[1] > 0 else 0
+
+        lines = []
+
+        # Header
         lines.append("=" * 80)
-        lines.append(f"TOTAL OPERATIONS: {total_ops}")
-        lines.append(f"Initial shape: {initial_shape}")
-        lines.append(f"Final shape: {final_shape}")
-        lines.append(f"Total rows changed: {total_rows_changed:+d}")
-        lines.append(f"Total columns changed: {total_cols_changed:+d}")
+        lines.append("                      PREPROCESSING PIPELINE SUMMARY")
+        lines.append("=" * 80)
+        lines.append("")
+
+        # Overview section
+        lines.append("OVERVIEW")
+        lines.append(f"  Operations:     {total_ops}")
+        lines.append(f"  Initial Shape:  {initial_shape[0]:,} rows x {initial_shape[1]} columns")
+        lines.append(f"  Final Shape:    {final_shape[0]:,} rows x {final_shape[1]} columns")
+
+        # Data change summary
+        data_changes = []
+        if total_rows_changed != 0:
+            direction = "removed" if total_rows_changed < 0 else "added"
+            data_changes.append(f"{abs(total_rows_changed):,} rows {direction} ({rows_pct:.1f}%)")
+        if total_cols_changed != 0:
+            direction = "removed" if total_cols_changed < 0 else "added"
+            data_changes.append(f"{abs(total_cols_changed)} columns {direction} ({cols_pct:.1f}%)")
+
+        if data_changes:
+            lines.append(f"  Data Changed:   {', '.join(data_changes)}")
+        else:
+            lines.append("  Data Changed:   No net change in shape")
+
+        lines.append("")
+        lines.append("-" * 80)
+        lines.append("")
+
+        # Timeline section
+        lines.append("TIMELINE")
+        lines.append("")
+
+        for i, op in enumerate(self._operation_history, 1):
+            is_first = i == 1
+            is_last = i == total_ops
+
+            # Determine tree character
+            if total_ops == 1:
+                tree_char = "---"
+            elif is_first:
+                tree_char = "+-"
+            elif is_last:
+                tree_char = "`-"
+            else:
+                tree_char = "|-"
+
+            # Operation header
+            lines.append(f"  {tree_char} Operation {i}: {op['method']}")
+
+            # Continuation character
+            cont_char = "  " if is_last else "| "
+
+            # Shape change with arrow
+            shape_before = op['shape_before']
+            shape_after = op['shape_after']
+            rows_diff = shape_after[0] - shape_before[0]
+            cols_diff = shape_after[1] - shape_before[1]
+
+            shape_line = f"     {cont_char} {shape_before[0]:,} x {shape_before[1]}  --->  {shape_after[0]:,} x {shape_after[1]}"
+
+            # Add change indicators
+            changes = []
+            if rows_diff != 0:
+                changes.append(f"{rows_diff:+,} rows")
+            if cols_diff != 0:
+                changes.append(f"{cols_diff:+} cols")
+
+            if changes:
+                shape_line += f"  ({', '.join(changes)})"
+
+            lines.append(shape_line)
+
+            # Parameters (condensed)
+            if op['parameters']:
+                param_parts = []
+                for key, value in op['parameters'].items():
+                    if value is not None:
+                        if isinstance(value, list):
+                            if len(value) <= 3:
+                                val_str = str(value)
+                            else:
+                                val_str = f"[{len(value)} items]"
+                        else:
+                            val_str = str(value)
+                        param_parts.append(f"{key}={val_str}")
+
+                if param_parts:
+                    params_str = ", ".join(param_parts[:3])
+                    if len(param_parts) > 3:
+                        params_str += f", +{len(param_parts) - 3} more"
+                    lines.append(f"     {cont_char} Params: {params_str}")
+
+            # Add details if significant
+            if 'details' in op:
+                for key, value in list(op['details'].items())[:2]:
+                    lines.append(f"     {cont_char} {key}: {value}")
+
+            lines.append(f"     {cont_char}")
+
+        lines.append("")
         lines.append("=" * 80)
 
         return "\n".join(lines)

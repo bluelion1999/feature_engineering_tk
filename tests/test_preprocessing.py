@@ -636,12 +636,12 @@ class TestOperationHistory:
 
         summary = preprocessor.get_preprocessing_summary()
 
-        assert "PREPROCESSING SUMMARY" in summary
-        assert "REMOVE_DUPLICATES" in summary
-        assert "DROP_COLUMNS" in summary
-        assert "TOTAL OPERATIONS: 2" in summary
-        assert "Initial shape: (6, 4)" in summary
-        assert "Final shape: (5, 3)" in summary
+        assert "PREPROCESSING PIPELINE SUMMARY" in summary
+        assert "remove_duplicates" in summary
+        assert "drop_columns" in summary
+        assert "Operations:     2" in summary
+        assert "Initial Shape:  6 rows x 4 columns" in summary
+        assert "Final Shape:    5 rows x 3 columns" in summary
 
     def test_get_summary_shows_shape_changes(self, sample_df):
         """Test that summary correctly shows shape changes."""
@@ -649,8 +649,8 @@ class TestOperationHistory:
         preprocessor.handle_outliers(['a'], method='iqr', action='remove', inplace=True)
 
         summary = preprocessor.get_preprocessing_summary()
-        assert "Shape:" in summary
-        assert "Rows changed:" in summary
+        assert "OVERVIEW" in summary
+        assert "--->" in summary  # Shape change arrows
 
     def test_export_summary_text_format(self, sample_df, tmp_path):
         """Test exporting summary as text file."""
@@ -662,8 +662,8 @@ class TestOperationHistory:
 
         assert filepath.exists()
         content = filepath.read_text()
-        assert "PREPROCESSING SUMMARY" in content
-        assert "REMOVE_DUPLICATES" in content
+        assert "PREPROCESSING PIPELINE SUMMARY" in content
+        assert "remove_duplicates" in content
 
     def test_export_summary_markdown_format(self, sample_df, tmp_path):
         """Test exporting summary as markdown file."""

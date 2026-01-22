@@ -292,9 +292,9 @@ class TestSummaryReport:
 
         assert isinstance(report, str)
         assert 'TARGET ANALYSIS REPORT' in report
-        assert 'CLASSIFICATION' in report
+        assert 'Classification' in report  # In executive summary
         assert 'CLASS DISTRIBUTION' in report
-        assert 'Imbalance Ratio:' in report  # Imbalance info included in distribution section
+        assert 'Imbalance Ratio:' in report
 
     def test_generate_summary_report_regression(self, regression_df):
         """Test summary report for regression"""
@@ -303,8 +303,8 @@ class TestSummaryReport:
 
         assert isinstance(report, str)
         assert 'TARGET ANALYSIS REPORT' in report
-        assert 'REGRESSION' in report
-        assert 'TARGET STATISTICS' in report  # Section header for regression stats
+        assert 'Regression' in report  # In executive summary
+        assert 'TARGET STATISTICS' in report
         assert 'Mean:' in report
         assert 'Skewness:' in report
 
@@ -313,14 +313,17 @@ class TestSummaryReport:
         analyzer = TargetAnalyzer(classification_df, target_column='target')
         report = analyzer.generate_summary_report()
 
-        # Check basic info
-        assert 'Task Type:' in report
+        # Check executive summary section
+        assert 'EXECUTIVE SUMMARY' in report
+        assert 'Task:' in report
+        assert 'Target:' in report
+
+        # Check task information section
+        assert 'TASK INFORMATION' in report
         assert 'Target Column:' in report
-        assert 'Unique Values:' in report
 
         # Check classification metrics
         assert 'Imbalance Ratio:' in report
-        assert 'Recommendation:' in report
 
 
 class TestCaching:

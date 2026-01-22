@@ -526,87 +526,153 @@ class DataAnalyzer(FeatureEngineeringBase):
 
 
 def quick_analysis(df: pd.DataFrame) -> None:
-    """Perform a quick comprehensive analysis of a dataframe."""
+    """
+    Perform a quick comprehensive analysis of a dataframe.
+
+    Prints a formatted report with:
+    - Summary of data shape, memory, and issues found
+    - Data quality analysis (missing values, duplicates)
+    - Feature summaries (numeric and categorical)
+    - Correlation analysis
+    - Recommendations (misclassified columns, binning suggestions)
+
+    Args:
+        df: DataFrame to analyze
+    """
     analyzer = DataAnalyzer(df)
 
-    print("=" * 80)
-    print("BASIC INFORMATION")
-    print("=" * 80)
-    basic_info = analyzer.get_basic_info()
-    print(f"Shape: {basic_info['shape']}")
-    print(f"Memory Usage: {basic_info['memory_usage_mb']:.2f} MB")
-    print(f"Duplicates: {basic_info['duplicates']}")
-    print()
+    # Gather all data first
+    basic_info_df = analyzer.get_basic_info()
+    # Extract values from single-row DataFrame
+    shape = basic_info_df['shape'].iloc[0]
+    memory_mb = basic_info_df['memory_usage_mb'].iloc[0]
+    duplicates = basic_info_df['duplicates'].iloc[0]
 
-    print("=" * 80)
-    print("MISSING VALUES")
-    print("=" * 80)
     missing = analyzer.get_missing_summary()
-    if missing.empty:
-        print("No missing values found.")
-    else:
-        print(missing.to_string(index=False))
-    print()
-
-    print("=" * 80)
-    print("NUMERIC SUMMARY")
-    print("=" * 80)
     numeric_summary = analyzer.get_numeric_summary()
-    if not numeric_summary.empty:
-        print(numeric_summary)
-    else:
-        print("No numeric columns found.")
+    cat_summary = analyzer.get_categorical_summary()
+    cardinality = analyzer.get_cardinality_info()
+    high_corr = analyzer.get_high_correlations(threshold=0.7)
+    misclassified = analyzer.detect_misclassified_categorical()
+    binning = analyzer.suggest_binning()
+
+    # Count issues for summary
+    issues = []
+    if not missing.empty:
+        issues.append(f"{len(missing)} columns with missing values")
+    if duplicates > 0:
+        issues.append(f"{duplicates} duplicate rows")
+    if not high_corr.empty:
+        issues.append(f"{len(high_corr)} high correlation pairs")
+    if not misclassified.empty:
+        issues.append(f"{len(misclassified)} potentially misclassified columns")
+
+    # Count column types
+    n_numeric = len(numeric_summary.columns) if not numeric_summary.empty else 0
+    n_categorical = len(cat_summary) if not cat_summary.empty else 0
+
+    # Extract shape
+    rows, cols = shape
+
+    # Print header
+    print("=" * 80)
+    print("                         DATA ANALYSIS REPORT")
+    print("=" * 80)
     print()
 
-    print("=" * 80)
-    print("CATEGORICAL SUMMARY")
-    print("=" * 80)
-    cat_summary = analyzer.get_categorical_summary()
+    # Summary section
+    print("SUMMARY")
+    print(f"  Shape: {rows:,} rows x {cols} columns | Memory: {memory_mb:.2f} MB")
+    if issues:
+        print(f"  Issues: {len(issues)} found ({', '.join(issues[:2])}{'...' if len(issues) > 2 else ''})")
+    else:
+        print("  Issues: None detected")
+    print()
+    print("-" * 80)
+
+    # Basic Information
+    print()
+    print(">>> BASIC INFORMATION")
+    print(f"  Rows:        {rows:,}")
+    print(f"  Columns:     {cols} ({n_numeric} numeric, {n_categorical} categorical)")
+    print(f"  Memory:      {memory_mb:.2f} MB")
+    print(f"  Duplicates:  {duplicates} rows ({duplicates/rows*100:.1f}%)")
+    print()
+
+    # Data Quality
+    print(">>> DATA QUALITY")
+    if not missing.empty:
+        print("  Missing Values:")
+        for _, row in missing.head(5).iterrows():
+            print(f"    - {row['column']}: {row['missing_count']} ({row['missing_percent']:.1f}%)")
+        if len(missing) > 5:
+            print(f"    ... and {len(missing) - 5} more columns")
+    else:
+        print("  Missing Values: None")
+
+    if not high_corr.empty:
+        print()
+        print("  High Correlations (|r| >= 0.7):")
+        for _, row in high_corr.head(3).iterrows():
+            print(f"    - {row['feature_1']} <-> {row['feature_2']}: r = {row['correlation']:.3f}")
+        if len(high_corr) > 3:
+            print(f"    ... and {len(high_corr) - 3} more pairs")
+    print()
+
+    # Numeric Features
+    print(">>> NUMERIC FEATURES" + (f" ({n_numeric} columns)" if n_numeric > 0 else ""))
+    if not numeric_summary.empty:
+        # Show condensed summary
+        print(numeric_summary.to_string())
+    else:
+        print("  No numeric columns found.")
+    print()
+
+    # Categorical Features
+    print(">>> CATEGORICAL FEATURES" + (f" ({n_categorical} columns)" if n_categorical > 0 else ""))
     if not cat_summary.empty:
         print(cat_summary.to_string(index=False))
     else:
-        print("No categorical columns found.")
+        print("  No categorical columns found.")
     print()
 
-    print("=" * 80)
-    print("CARDINALITY INFORMATION")
-    print("=" * 80)
-    cardinality = analyzer.get_cardinality_info()
-    print(cardinality.to_string(index=False))
+    # Cardinality (condensed)
+    print(">>> CARDINALITY")
+    high_card = cardinality[cardinality['cardinality_ratio'] > 0.5]
+    low_card = cardinality[cardinality['unique_count'] <= 10]
+    if not high_card.empty:
+        print("  High cardinality (>50% unique):")
+        for _, row in high_card.head(3).iterrows():
+            print(f"    - {row['column']}: {row['unique_count']} unique ({row['cardinality_ratio']*100:.1f}%)")
+    if not low_card.empty and len(low_card) != len(cardinality):
+        print("  Low cardinality (<=10 unique):")
+        for _, row in low_card.head(3).iterrows():
+            print(f"    - {row['column']}: {row['unique_count']} unique")
+    if high_card.empty and (low_card.empty or len(low_card) == len(cardinality)):
+        print("  All columns have moderate cardinality.")
     print()
 
-    print("=" * 80)
-    print("HIGH CORRELATIONS (|r| >= 0.7)")
-    print("=" * 80)
-    high_corr = analyzer.get_high_correlations(threshold=0.7)
-    if not high_corr.empty:
-        print(high_corr.to_string(index=False))
-    else:
-        print("No high correlations found.")
-    print()
+    # Recommendations
+    if not misclassified.empty or not binning.empty:
+        print(">>> RECOMMENDATIONS")
 
-    print("=" * 80)
-    print("MISCLASSIFIED CATEGORICAL COLUMNS")
-    print("=" * 80)
-    misclassified = analyzer.detect_misclassified_categorical()
-    if not misclassified.empty:
-        print(misclassified.to_string(index=False))
+        if not misclassified.empty:
+            print()
+            print("  Potential Misclassified Categoricals:")
+            for _, row in misclassified.iterrows():
+                print(f"    - {row['column']}: {row['suggestion']}")
+            print("    Tip: Consider converting these to categorical type")
+
+        if not binning.empty:
+            print()
+            print("  Binning Suggestions:")
+            for _, row in binning.iterrows():
+                print(f"    - {row['column']}: {row['strategy']} ({row['num_bins']} bins) - {row['reason']}")
+            print("    Tip: Use FeatureEngineer.create_binning(column, bins, strategy)")
+
         print()
-        print("💡 Tip: These numeric columns may benefit from categorical encoding.")
-    else:
-        print("No numeric columns appear to be misclassified categorical variables.")
-    print()
 
     print("=" * 80)
-    print("BINNING SUGGESTIONS")
-    print("=" * 80)
-    binning = analyzer.suggest_binning()
-    if not binning.empty:
-        print(binning.to_string(index=False))
-        print()
-        print("💡 Tip: Use FeatureEngineer.create_binning(column, bins, strategy) to apply.")
-    else:
-        print("No binning suggestions (columns may have too few unique values).")
 
 
 # Backward compatibility: Import TargetAnalyzer from new location

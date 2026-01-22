@@ -241,63 +241,117 @@ class TargetAnalyzerCore(FeatureEngineeringBase):
         self._analysis_cache['target_distribution'] = distribution
         return distribution
 
+    def _make_bar(self, value: float, max_value: float, width: int = 20) -> str:
+        """Create a simple ASCII bar chart."""
+        filled = int((value / max_value) * width) if max_value > 0 else 0
+        return "#" * filled + "-" * (width - filled)
+
     def generate_summary_report(self) -> str:
         """
-        Generate a comprehensive text summary report.
+        Generate a comprehensive text summary report with executive summary.
 
         Returns:
             str: Formatted text report with task-specific statistics
         """
         lines = []
+        info = self.get_task_info()
+
+        # Header
         lines.append("=" * 80)
-        lines.append("TARGET ANALYSIS REPORT")
+        lines.append("                         TARGET ANALYSIS REPORT")
         lines.append("=" * 80)
         lines.append("")
 
-        # Task info
-        info = self.get_task_info()
-        lines.append(f"Task Type: {info['task'].upper()}")
-        lines.append(f"Target Column: {info['target_column']}")
-        lines.append(f"Data Type: {info['target_dtype']}")
-        lines.append(f"Unique Values: {info['unique_values']}")
-        lines.append(f"Missing: {info['missing_count']} ({info['missing_percent']:.2f}%)")
+        # Executive Summary
+        lines.append("EXECUTIVE SUMMARY")
+        task_type = info['task'].capitalize()
+        n_classes = info.get('class_count', info['unique_values'])
+
+        if self.task == 'classification':
+            class_desc = "binary" if n_classes == 2 else f"{n_classes}-class"
+            lines.append(f"  Task:      {task_type} ({class_desc})")
+            lines.append(f"  Target:    '{info['target_column']}' ({n_classes} classes)")
+
+            imbalance = self.get_class_imbalance_info()
+            if imbalance:
+                severity = imbalance['severity']
+                if severity == 'severe':
+                    status = f"Severe class imbalance (ratio: {imbalance['imbalance_ratio']:.1f}:1)"
+                    action = "Use SMOTE, class weights, or undersampling"
+                elif severity == 'moderate':
+                    status = f"Moderate class imbalance (ratio: {imbalance['imbalance_ratio']:.1f}:1)"
+                    action = "Consider class weights or stratified sampling"
+                else:
+                    status = "Classes are well balanced"
+                    action = "No rebalancing needed"
+                lines.append(f"  Status:    {status}")
+                lines.append(f"  Action:    {action}")
+        else:
+            lines.append(f"  Task:      {task_type} (continuous)")
+            lines.append(f"  Target:    '{info['target_column']}'")
+
+            dist = self.analyze_target_distribution()
+            if dist:
+                skew = dist.get('skewness', 0)
+                if abs(skew) > 2:
+                    status = f"Highly skewed distribution (skewness: {skew:.2f})"
+                    action = "Consider log transformation"
+                elif abs(skew) > 1:
+                    status = f"Moderately skewed distribution (skewness: {skew:.2f})"
+                    action = "May benefit from transformation"
+                else:
+                    status = "Distribution is approximately symmetric"
+                    action = "No transformation needed"
+                lines.append(f"  Status:    {status}")
+                lines.append(f"  Action:    {action}")
+
+        lines.append("")
+        lines.append("-" * 80)
+
+        # Task Information
+        lines.append("")
+        lines.append(">>> TASK INFORMATION")
+        lines.append(f"  Target Column:  {info['target_column']}")
+        lines.append(f"  Data Type:      {info['target_dtype']}")
+        if self.task == 'classification':
+            lines.append(f"  Classes:        {n_classes} ({', '.join(str(c) for c in info.get('classes', [])[:5])}{'...' if n_classes > 5 else ''})")
+        else:
+            lines.append(f"  Unique Values:  {info['unique_values']}")
+        lines.append(f"  Missing:        {info['missing_count']} ({info['missing_percent']:.2f}%)")
         lines.append("")
 
         if self.task == 'classification':
-            lines.append("-" * 40)
-            lines.append("CLASS DISTRIBUTION")
-            lines.append("-" * 40)
-
+            lines.append(">>> CLASS DISTRIBUTION")
             dist = self.analyze_class_distribution()
+            max_count = dist['count'].max()
+
             for _, row in dist.iterrows():
-                lines.append(f"  {row['class']}: {row['count']} ({row['percentage']:.1f}%)")
+                bar = self._make_bar(row['count'], max_count, 25)
+                lines.append(f"  {str(row['class']):>10}:  {int(row['count']):>6} ({row['percentage']:>5.1f}%)  {bar}")
 
             imbalance = self.get_class_imbalance_info()
             if imbalance:
                 lines.append("")
-                lines.append(f"Imbalance Ratio: {imbalance['imbalance_ratio']:.2f}")
-                lines.append(f"Severity: {imbalance['severity'].upper()}")
-                lines.append(f"Recommendation: {imbalance['recommendation']}")
+                lines.append(f"  Imbalance Ratio: {imbalance['imbalance_ratio']:.2f}:1")
+                lines.append(f"  Severity: {imbalance['severity'].upper()}")
 
         elif self.task == 'regression':
-            lines.append("-" * 40)
-            lines.append("TARGET STATISTICS")
-            lines.append("-" * 40)
-
+            lines.append(">>> TARGET STATISTICS")
             dist = self.analyze_target_distribution()
             if dist:
-                lines.append(f"  Count: {dist['count']}")
-                lines.append(f"  Mean: {dist['mean']:.4f}")
-                lines.append(f"  Median: {dist['median']:.4f}")
-                lines.append(f"  Std Dev: {dist['std']:.4f}")
-                lines.append(f"  Range: [{dist['min']:.4f}, {dist['max']:.4f}]")
-                lines.append(f"  IQR: {dist['iqr']:.4f}")
-                lines.append(f"  Skewness: {dist['skewness']:.4f}")
-                lines.append(f"  Kurtosis: {dist['kurtosis']:.4f}")
+                lines.append(f"  Count:     {dist['count']:,}")
+                lines.append(f"  Mean:      {dist['mean']:.4f}")
+                lines.append(f"  Median:    {dist['median']:.4f}")
+                lines.append(f"  Std Dev:   {dist['std']:.4f}")
+                lines.append(f"  Range:     [{dist['min']:.4f}, {dist['max']:.4f}]")
+                lines.append(f"  IQR:       {dist['iqr']:.4f}")
+                lines.append("")
+                lines.append(f"  Skewness:  {dist['skewness']:.4f}")
+                lines.append(f"  Kurtosis:  {dist['kurtosis']:.4f}")
 
                 if 'is_normal' in dist:
                     normality = "Yes" if dist['is_normal'] else "No"
-                    lines.append(f"  Normal Distribution: {normality} (p={dist['shapiro_pvalue']:.4f})")
+                    lines.append(f"  Normal:    {normality} (p={dist['shapiro_pvalue']:.4f})")
 
         lines.append("")
         lines.append("=" * 80)

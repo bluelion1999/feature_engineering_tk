@@ -6,7 +6,7 @@ Contains methods for suggesting feature transformations and ML models.
 
 import numpy as np
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union
 
 from ..utils import get_feature_columns, get_numeric_columns
 
@@ -24,7 +24,43 @@ class SuggestionsMixin:
               self.get_task_info, self.get_class_imbalance_info, self.analyze_target_distribution
     """
 
-    def suggest_feature_engineering(self) -> List[Dict[str, Any]]:
+    def _categorize_suggestion(self, suggestion: Dict[str, Any]) -> str:
+        """Categorize a suggestion by its type."""
+        sugg_text = suggestion['suggestion'].lower()
+        if any(x in sugg_text for x in ['log', 'sqrt', 'polynomial', 'square', 'exponential']):
+            return 'transformations'
+        elif any(x in sugg_text for x in ['encode', 'one-hot', 'ordinal', 'target encode']):
+            return 'encoding'
+        elif any(x in sugg_text for x in ['scaler', 'scale', 'standardscaler', 'minmax']):
+            return 'scaling'
+        elif any(x in sugg_text for x in ['interaction', 'ratio']):
+            return 'interactions'
+        elif any(x in sugg_text for x in ['bin', 'categorical groups']):
+            return 'binning'
+        elif any(x in sugg_text for x in ['missing', 'indicator']):
+            return 'missing_values'
+        else:
+            return 'other'
+
+    def _get_effort(self, suggestion: Dict[str, Any]) -> str:
+        """Estimate effort level for a suggestion."""
+        sugg_text = suggestion['suggestion'].lower()
+        # Minimal effort operations
+        if any(x in sugg_text for x in ['one-hot', 'indicator']):
+            return 'minimal'
+        # Low effort operations
+        elif any(x in sugg_text for x in ['log', 'sqrt', 'scaler', 'standardscaler', 'minmax']):
+            return 'low'
+        # Medium effort operations
+        elif any(x in sugg_text for x in ['polynomial', 'bin', 'ordinal']):
+            return 'medium'
+        # Higher effort operations
+        elif any(x in sugg_text for x in ['target encode', 'interaction', 'group rare']):
+            return 'medium'
+        else:
+            return 'low'
+
+    def suggest_feature_engineering(self, grouped: bool = False) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Analyze features and generate intelligent feature engineering suggestions.
 
@@ -35,8 +71,15 @@ class SuggestionsMixin:
         - Interaction terms
         - Binning strategies
 
+        Args:
+            grouped: If True, returns structured dict with suggestions grouped by category.
+                    If False (default), returns flat list for backward compatibility.
+
         Returns:
-            List of dicts with 'feature', 'suggestion', 'reason', and 'priority' keys
+            If grouped=False: List of dicts with 'feature', 'suggestion', 'reason',
+                             'priority', and 'effort' keys
+            If grouped=True: Dict with 'summary', 'quick_wins', 'by_category', and
+                            'all_suggestions' keys
         """
         suggestions = []
         features = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=False)
@@ -176,14 +219,65 @@ class SuggestionsMixin:
                     'priority': 'medium' if missing_pct > 20 else 'low'
                 })
 
+        # Add effort and category to each suggestion
+        for sugg in suggestions:
+            sugg['effort'] = self._get_effort(sugg)
+            sugg['category'] = self._categorize_suggestion(sugg)
+
         # Sort by priority
         priority_order = {'high': 0, 'medium': 1, 'low': 2}
         suggestions.sort(key=lambda x: priority_order[x['priority']])
 
         logger.info(f"Generated {len(suggestions)} feature engineering suggestions")
-        return suggestions
 
-    def recommend_models(self) -> List[Dict[str, Any]]:
+        # Return flat list for backward compatibility
+        if not grouped:
+            return suggestions
+
+        # Build grouped response
+        quick_wins = [s for s in suggestions
+                      if s['effort'] in ['minimal', 'low'] and s['priority'] in ['high', 'medium']]
+
+        by_category = {}
+        for sugg in suggestions:
+            cat = sugg['category']
+            if cat not in by_category:
+                by_category[cat] = []
+            by_category[cat].append(sugg)
+
+        return {
+            'summary': {
+                'total_suggestions': len(suggestions),
+                'high_priority': len([s for s in suggestions if s['priority'] == 'high']),
+                'medium_priority': len([s for s in suggestions if s['priority'] == 'medium']),
+                'low_priority': len([s for s in suggestions if s['priority'] == 'low']),
+                'quick_wins': len(quick_wins)
+            },
+            'quick_wins': quick_wins[:5],  # Top 5 quick wins
+            'by_category': by_category,
+            'all_suggestions': suggestions
+        }
+
+    def _get_model_attributes(self, model_name: str) -> Dict[str, str]:
+        """Get training speed, memory, and interpretability for a model."""
+        attributes = {
+            'Random Forest': {'speed': 'fast', 'memory': 'moderate', 'interpretability': 'medium'},
+            'XGBoost': {'speed': 'moderate', 'memory': 'moderate', 'interpretability': 'low'},
+            'LightGBM': {'speed': 'fast', 'memory': 'low', 'interpretability': 'low'},
+            'Logistic Regression': {'speed': 'fast', 'memory': 'low', 'interpretability': 'high'},
+            'Linear Regression': {'speed': 'fast', 'memory': 'low', 'interpretability': 'high'},
+            'Ridge': {'speed': 'fast', 'memory': 'low', 'interpretability': 'high'},
+            'Lasso': {'speed': 'fast', 'memory': 'low', 'interpretability': 'high'},
+            'SVM': {'speed': 'slow', 'memory': 'high', 'interpretability': 'low'},
+            'Neural Network': {'speed': 'slow', 'memory': 'high', 'interpretability': 'low'},
+            'Huber': {'speed': 'fast', 'memory': 'low', 'interpretability': 'high'},
+        }
+        for key, attrs in attributes.items():
+            if key in model_name:
+                return attrs
+        return {'speed': 'moderate', 'memory': 'moderate', 'interpretability': 'medium'}
+
+    def recommend_models(self, detailed: bool = False) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Recommend ML algorithms based on data characteristics and task type.
 
@@ -194,8 +288,14 @@ class SuggestionsMixin:
         - Feature relationships (linear/non-linear)
         - Target distribution (regression)
 
+        Args:
+            detailed: If True, returns structured dict with summary and comparison.
+                     If False (default), returns flat list for backward compatibility.
+
         Returns:
-            List of dicts with 'model', 'reason', 'priority', and 'considerations' keys
+            If detailed=False: List of dicts with 'model', 'reason', 'priority',
+                              'considerations', 'speed', 'memory', 'interpretability' keys
+            If detailed=True: Dict with 'summary', 'comparison', and 'recommendations' keys
         """
         recommendations = []
         n_samples, n_features = len(self.df), len(self.df.columns) - 1
@@ -205,6 +305,14 @@ class SuggestionsMixin:
         is_small = n_samples < 1000
         is_large = n_samples > 50000
         is_high_dim = n_features > 50
+
+        # Determine dataset size label
+        if is_small:
+            dataset_size = 'small'
+        elif is_large:
+            dataset_size = 'large'
+        else:
+            dataset_size = 'medium'
 
         if self.task == 'classification':
             imbalance_info = self.get_class_imbalance_info()
@@ -339,9 +447,45 @@ class SuggestionsMixin:
                 'considerations': 'Use stratified k-fold. Avoid complex models that may overfit.'
             })
 
+        # Add speed, memory, interpretability to each recommendation
+        for rec in recommendations:
+            attrs = self._get_model_attributes(rec['model'])
+            rec['speed'] = attrs['speed']
+            rec['memory'] = attrs['memory']
+            rec['interpretability'] = attrs['interpretability']
+
         # Sort by priority
         priority_order = {'high': 0, 'medium': 1, 'low': 2}
         recommendations.sort(key=lambda x: priority_order[x['priority']])
 
         logger.info(f"Generated {len(recommendations)} model recommendations for {self.task}")
-        return recommendations
+
+        # Return flat list for backward compatibility
+        if not detailed:
+            return recommendations
+
+        # Build detailed response
+        # Get top recommendation
+        top_rec = recommendations[0] if recommendations else None
+
+        return {
+            'summary': {
+                'task': self.task,
+                'dataset_size': dataset_size,
+                'n_samples': n_samples,
+                'n_features': n_features,
+                'recommended': top_rec['model'] if top_rec else None,
+                'total_recommendations': len(recommendations)
+            },
+            'comparison': [
+                {
+                    'model': rec['model'].split(' with ')[0].split(' (')[0],  # Short name
+                    'speed': rec['speed'],
+                    'memory': rec['memory'],
+                    'interpretability': rec['interpretability'],
+                    'priority': rec['priority']
+                }
+                for rec in recommendations[:5]  # Top 5 for comparison
+            ],
+            'recommendations': recommendations
+        }

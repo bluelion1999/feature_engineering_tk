@@ -6,7 +6,7 @@ from sklearn.feature_selection import (
     mutual_info_regression, chi2, VarianceThreshold
 )
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from typing import List, Optional, Union, Dict, Callable, Any
+from typing import List, Optional, Tuple, Union, Dict, Callable, Any
 
 from .base import FeatureEngineeringBase
 from .utils import (
@@ -14,6 +14,7 @@ from .utils import (
     get_numeric_columns,
     get_feature_columns
 )
+from .exceptions import DataTypeError, InvalidMethodError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ class FeatureSelector(FeatureEngineeringBase):
         >>> selector = FeatureSelector(df, target_column='target')
         >>> selected = selector.select_by_variance(threshold=0.1)
         >>> selected = selector.select_by_target_correlation(threshold=0.3)
-        >>> auto_selected = select_features_auto(df, 'target', task='classification')
+        >>> selected_df, auto_selector = select_features_auto(df, 'target', task='classification')
     """
 
     def __init__(self, df: pd.DataFrame, target_column: Optional[str] = None):
@@ -115,12 +116,27 @@ class FeatureSelector(FeatureEngineeringBase):
     def select_by_target_correlation(self, k: int = 10,
                                       method: str = 'pearson',
                                       exclude_columns: Optional[List[str]] = None) -> List[str]:
-        """Select top k features most correlated with target."""
+        """
+        Select top k features most correlated with target.
+
+        Raises:
+            ValueError: If target_column is not set or not found in the dataframe
+            DataTypeError: If target_column is not numeric (correlation requires a
+                numeric target; use select_by_statistical_test with chi2 or
+                mutual_info_classif for categorical targets instead)
+        """
         if not self.target_column:
             raise ValueError("target_column must be specified for this method")
 
         if self.target_column not in self.df.columns:
             raise ValueError(f"Target column '{self.target_column}' not found in dataframe")
+
+        if not pd.api.types.is_numeric_dtype(self.df[self.target_column]):
+            raise DataTypeError(
+                self.target_column,
+                'numeric',
+                str(self.df[self.target_column].dtype)
+            )
 
         # Add target column to exclusion list if present
         if exclude_columns is None:
@@ -148,7 +164,27 @@ class FeatureSelector(FeatureEngineeringBase):
                                     task: str = 'classification',
                                     score_func: Optional[Union[str, Callable]] = None,
                                     exclude_columns: Optional[List[str]] = None) -> List[str]:
-        """Select features using statistical tests."""
+        """
+        Select features using statistical tests.
+
+        Args:
+            k: Number of top features to select
+            task: 'classification' or 'regression'. Determines the default score_func
+                when score_func is not provided.
+            score_func: A callable scoring function, or one of the recognized string
+                keys ('f_classif', 'f_regression', 'mutual_info_classif',
+                'mutual_info_regression', 'chi2'). If None, defaults to f_classif for
+                classification or f_regression for regression.
+            exclude_columns: Columns to exclude from consideration (target is
+                always excluded automatically)
+
+        Returns:
+            List of selected feature names
+
+        Raises:
+            ValueError: If target_column is not set or not found in the dataframe
+            InvalidMethodError: If score_func is an unrecognized string
+        """
         if not self.target_column:
             raise ValueError("target_column must be specified for this method")
 
@@ -183,7 +219,10 @@ class FeatureSelector(FeatureEngineeringBase):
                 'mutual_info_regression': mutual_info_regression,
                 'chi2': chi2
             }
-            score_func = score_func_map.get(score_func, f_classif)
+            if isinstance(score_func, str):
+                if score_func not in score_func_map:
+                    raise InvalidMethodError(score_func, list(score_func_map.keys()))
+                score_func = score_func_map[score_func]
 
         top_k = min(k, len(feature_cols))
         selector = SelectKBest(score_func=score_func, k=top_k)
@@ -258,8 +297,8 @@ class FeatureSelector(FeatureEngineeringBase):
         if exclude_columns is None:
             exclude_columns = []
 
-        if self.target_column:
-            exclude_columns.append(self.target_column)
+        if self.target_column and self.target_column not in exclude_columns:
+            exclude_columns = exclude_columns + [self.target_column]
 
         feature_cols = [col for col in self.df.columns if col not in exclude_columns]
 
@@ -321,8 +360,36 @@ def select_features_auto(df: pd.DataFrame,
                           task: str = 'classification',
                           max_features: int = 20,
                           variance_threshold: float = 0.01,
-                          correlation_threshold: float = 0.9) -> pd.DataFrame:
-    """Automatically select features using multiple methods."""
+                          correlation_threshold: float = 0.9) -> Tuple[pd.DataFrame, 'FeatureSelector']:
+    """
+    Automatically select features using a 3-step pipeline: variance
+    thresholding, correlation filtering, and importance-based selection.
+
+    Args:
+        df: Input pandas DataFrame
+        target_column: Name of the target column (must exist in df)
+        task: 'classification' or 'regression', used for the importance
+            step's model choice
+        max_features: Maximum number of features to keep after the final
+            importance-based selection step
+        variance_threshold: Minimum variance for a feature to survive step 1
+        correlation_threshold: Maximum pairwise correlation allowed between
+            two features before one is dropped in step 2
+
+    Returns:
+        A 2-tuple ``(result_df, selector)``:
+            - ``result_df`` (pd.DataFrame): DataFrame containing only the
+              finally selected features plus the target column
+            - ``selector`` (FeatureSelector): The FeatureSelector instance
+              used for the final (importance) step, so callers can inspect
+              ``selector.selected_features`` / ``selector.feature_scores``
+              after the pipeline runs
+
+    Example:
+        >>> selected_df, selector = select_features_auto(df, 'target', task='classification')
+        >>> selector.selected_features
+        ['feature1', 'feature3', 'feature7']
+    """
     selector = FeatureSelector(df, target_column)
 
     logger.info("Step 1: Removing low variance features...")

@@ -48,12 +48,6 @@ Critical bug fixes from TDD pass on the `fly_catcher` branch (7 total: 4 critica
 - Test-first approach: write failing test → fix bug → verify test passes
 - 100% backward compatible, no regressions
 
-> **Note (2026-08):** this entry corrects a mislabeling in earlier drafts of
-> `README.md`/`CLAUDE.md`, which had attributed the 7 `fly_catcher` bug
-> fixes to v2.4.2 and had no entry at all for the actual v2.4.2 (tutorials +
-> `select_features_auto` fix). Reconstructed from `git log v2.4.0..v2.4.1`
-> and `git log v2.4.1..v2.4.2`; see those commit ranges for the exact diffs.
-
 ## [2.4.0] - 2026-01-02
 
 ### Added

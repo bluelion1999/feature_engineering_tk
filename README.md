@@ -39,6 +39,14 @@ pip install feature-engineering-tk
 
 ## What's New in v2.4.2
 
+**Tutorials & Bug Fix:**
+
+- Added quickstart and in-depth tutorial notebooks under `examples/`
+- **Fixed `select_features_auto()`** - now returns an accessible reference to the underlying `FeatureSelector` object, so callers can inspect `selected_features` / `feature_scores` after the pipeline runs
+- Bug fixes in the tutorial notebooks so they run end-to-end against the current API
+
+## What's New in v2.4.1
+
 **Bug Fixes & Reliability Improvements:**
 
 This release focuses on critical bug fixes to improve reliability and edge case handling:

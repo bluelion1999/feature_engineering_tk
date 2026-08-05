@@ -10,6 +10,7 @@ from scipy.stats import chi2_contingency, f_oneway, pearsonr, spearmanr
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 from sklearn.metrics import r2_score
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+from statsmodels.tools.tools import add_constant
 
 from .base import FeatureEngineeringBase
 from .utils import (
@@ -232,9 +233,17 @@ class DataAnalyzer(FeatureEngineeringBase):
             return pd.DataFrame()
 
         try:
+            # variance_inflation_factor assumes the design matrix includes an
+            # intercept/constant column - VIF is defined relative to a regression
+            # that includes one. Without it, values are computed as if the
+            # regression passes through the origin, which is badly wrong for any
+            # data that isn't already mean-zero. Add the constant, then skip its
+            # own VIF (index 0) since it isn't a meaningful per-feature value.
+            df_vif_const = add_constant(df_vif, has_constant='add')
+
             vif_data = []
             for i, col in enumerate(df_vif.columns):
-                vif = variance_inflation_factor(df_vif.values, i)
+                vif = variance_inflation_factor(df_vif_const.values, i + 1)
                 vif_data.append({'feature': col, 'VIF': vif})
 
             vif_df = pd.DataFrame(vif_data)

@@ -177,12 +177,42 @@ class QualityMixin:
         try:
             mi_df = self.analyze_mutual_information()
             if not mi_df.empty:
-                low_mi = mi_df[mi_df['normalized_mi'] < 0.01]
-                if len(low_mi) > 0:
-                    recommendations.append(
-                        f"📊 {len(low_mi)} features have very low mutual information with target. "
-                        "Consider feature selection."
-                    )
+                if self.task == 'classification':
+                    # normalized_mi is a fixed absolute bound (see analyze_mutual_information
+                    # docstring), so an absolute threshold on it is meaningful here.
+                    low_mi = mi_df[mi_df['normalized_mi'] < 0.01]
+                    if len(low_mi) > 0:
+                        recommendations.append(
+                            f"📊 {len(low_mi)} features have very low mutual information with target. "
+                            "Consider feature selection."
+                        )
+                else:
+                    # regression: 'relative_mi' is only a within-analysis ranking aid, not an
+                    # absolute [0, 1] score (see analyze_mutual_information docstring) -- a
+                    # feature can score relative_mi == 1.0 purely for being the "best of the
+                    # noise" when every feature is weak.
+                    #
+                    # We deliberately do NOT threshold the raw 'mutual_info' score against a
+                    # fixed absolute epsilon here either: mutual_info_regression's KSG-based
+                    # estimator has finite-sample bias whose magnitude depends strongly on
+                    # sample size (empirically ~0.07 nats of noise-floor bias at n=200,
+                    # dropping to ~0.01 nats at n=5000 for pure noise), so any single fixed
+                    # cutoff would be too strict for small datasets and too lax for large
+                    # ones -- a false precision this recommendation should not manufacture.
+                    #
+                    # Instead we only ever make a *relative* claim (features ranking far below
+                    # the strongest one here), with an explicit caveat that this is not proof
+                    # of absolute predictive value -- so we never mis-describe a noise feature
+                    # that merely tops the relative ranking as "well correlated" or similar.
+                    low_relative_mi = mi_df[mi_df['relative_mi'] < 0.1]
+                    if len(low_relative_mi) > 0:
+                        recommendations.append(
+                            f"📊 {len(low_relative_mi)} feature(s) rank far below the strongest "
+                            "feature in this analysis by mutual information. Note this ranking "
+                            "is relative only -- check the raw 'mutual_info' column directly, "
+                            "since even the top-ranked feature may carry little real predictive "
+                            "signal if the target is weakly related to all analyzed features."
+                        )
         except:
             pass
 

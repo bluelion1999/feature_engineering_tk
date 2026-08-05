@@ -496,7 +496,13 @@ class TestPhase3RegressionFeatures:
         assert len(correlations) > 0
 
     def test_analyze_mutual_information_regression(self, regression_df):
-        """Test mutual information for regression"""
+        """Test mutual information for regression.
+
+        Regression uses 'relative_mi' (not 'normalized_mi') because continuous
+        mutual information has no fixed, dataset-independent [0, 1] bound the way
+        classification's log(n_classes) bound does -- see analyze_mutual_information()
+        docstring. 'relative_mi' is an explicitly within-analysis ranking aid.
+        """
         analyzer = TargetAnalyzer(regression_df, target_column='target')
         mi_results = analyzer.analyze_mutual_information()
 
@@ -504,16 +510,124 @@ class TestPhase3RegressionFeatures:
         if not mi_results.empty:
             assert 'feature' in mi_results.columns
             assert 'mutual_info' in mi_results.columns
-            assert 'normalized_mi' in mi_results.columns
+            assert 'relative_mi' in mi_results.columns
+            assert 'normalized_mi' not in mi_results.columns
 
     def test_analyze_mutual_information_classification(self, classification_df):
-        """Test mutual information for classification"""
+        """Test mutual information for classification.
+
+        Classification keeps 'normalized_mi': MI(X;Y) <= H(Y) <= log(n_classes) is a
+        real mathematical bound, independent of what other features are analyzed, so
+        it is a genuine absolute [0, 1] score (unlike regression's relative_mi).
+        """
         analyzer = TargetAnalyzer(classification_df, target_column='target')
         mi_results = analyzer.analyze_mutual_information()
 
         assert isinstance(mi_results, pd.DataFrame)
         if not mi_results.empty:
             assert 'feature' in mi_results.columns
+            assert 'normalized_mi' in mi_results.columns
+            assert (mi_results['normalized_mi'] >= 0).all()
+            assert (mi_results['normalized_mi'] <= 1).all()
+
+    def test_analyze_mutual_information_regression_all_noise_no_false_perfect_score(self):
+        """Regression test for the mutual-info normalization bug.
+
+        With 5 purely random (noise) features and a purely random target, the old
+        implementation divided each feature's MI by np.max(mi_scores) -- normalizing
+        relative to the noisiest-by-chance feature in *this* dataset -- so that
+        feature got normalized_mi == 1.000000, a "perfect" score despite having zero
+        real relationship to the target.
+
+        Under the fix, that quantity is renamed to 'relative_mi' and explicitly
+        documented as a within-analysis ranking aid rather than an absolute [0, 1]
+        score. Hitting 1.0 is therefore expected and not itself a bug -- what must
+        no longer happen is generate_recommendations() treating that 1.0 as evidence
+        the feature is informative.
+        """
+        np.random.seed(7)
+        n = 500
+        df = pd.DataFrame({f'noise{i}': np.random.randn(n) for i in range(5)})
+        df['target'] = np.random.randn(n)
+
+        analyzer = TargetAnalyzer(df, target_column='target')
+        mi_results = analyzer.analyze_mutual_information()
+
+        assert not mi_results.empty
+        assert 'relative_mi' in mi_results.columns
+
+        # Raw mutual information (the absolute-magnitude signal) should be small for
+        # every feature -- there is no real relationship to the target.
+        assert (mi_results['mutual_info'] < 0.5).all()
+
+        # generate_recommendations() must not describe any noise feature as
+        # informative/well-correlated/strong just because it topped the relative
+        # ranking. It should also not silently stay quiet about the fact that
+        # nothing here is meaningfully predictive.
+        recommendations = analyzer.generate_recommendations()
+        misleading_terms = [
+            'well correlated', 'strong predictor', 'strongly related',
+            'highly informative', 'well-correlated'
+        ]
+        joined = ' '.join(recommendations).lower()
+        for term in misleading_terms:
+            assert term not in joined, f"Recommendation text misleadingly used '{term}'"
+
+    def test_analyze_mutual_information_regression_strong_feature_distinguishable(self):
+        """A genuinely strong feature must remain clearly distinguishable from noise.
+
+        Sanity check that the fix (renaming to relative_mi) doesn't destroy the
+        useful case: raw mutual_info for a strong feature should be far larger than
+        for noise features, even though relative_mi for noise features can still
+        span up to 1.0 among themselves.
+        """
+        np.random.seed(11)
+        n = 500
+        X = np.random.randn(n, 5)
+        # feature 'f0' strongly (near-deterministically) drives the target;
+        # the rest are pure noise.
+        y = X[:, 0] * 3 + np.random.randn(n) * 0.1
+        df = pd.DataFrame(X, columns=[f'f{i}' for i in range(5)])
+        df['target'] = y
+
+        analyzer = TargetAnalyzer(df, target_column='target')
+        mi_results = analyzer.analyze_mutual_information()
+
+        assert not mi_results.empty
+        top = mi_results.iloc[0]
+        assert top['feature'] == 'f0'
+        assert top['relative_mi'] == 1.0
+
+        noise_raw_mi = mi_results.loc[mi_results['feature'] != 'f0', 'mutual_info']
+        # The strong feature's raw MI should be an order of magnitude above the
+        # noise features' raw MI -- this is what makes it "actually" informative,
+        # not merely relative rank.
+        assert top['mutual_info'] > 10 * noise_raw_mi.max()
+
+    def test_analyze_mutual_information_fillna_warns_when_zero_is_valid(self, caplog):
+        """analyze_mutual_information() silently fillna(0)'d missing values with no
+        warning, even when 0 is itself a real, meaningful observed value in that
+        column (not just a stand-in for "missing"). That fabricates a fake mode and
+        can bias the mutual information estimate unpredictably. A warning should now
+        be logged, matching the imputation-warning style used elsewhere in the
+        toolkit (e.g. DataPreprocessor's multiple-modes warning)."""
+        np.random.seed(3)
+        n = 100
+        df = pd.DataFrame({
+            # 0 is a legitimate, frequently-observed value in this column...
+            'feature1': [0.0] * 20 + list(np.random.randn(n - 30)) + [np.nan] * 10,
+            'target': np.random.randn(n)
+        })
+
+        analyzer = TargetAnalyzer(df, target_column='target')
+
+        with caplog.at_level('WARNING'):
+            analyzer.analyze_mutual_information()
+
+        assert any(
+            'missing value' in record.message.lower() and 'feature1' in record.message
+            for record in caplog.records
+        )
 
     def test_plot_feature_vs_target(self, regression_df):
         """Test scatter plots of features vs target"""

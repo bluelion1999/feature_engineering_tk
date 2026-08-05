@@ -434,7 +434,27 @@ class StatisticalMixin:
             feature_columns: List of features. If None, uses all columns except target.
 
         Returns:
-            DataFrame with columns: feature, mutual_info, normalized_mi
+            DataFrame with columns 'feature' and 'mutual_info' (raw MI score) always
+            present, plus one task-dependent normalization column:
+
+            - classification: 'normalized_mi' -- mutual_info divided by
+              log(n_classes), the theoretical maximum entropy of the target.
+              Since MI(X;Y) <= H(Y) <= log(n_classes), this is a fixed,
+              dataset/feature-independent upper bound: a genuine [0, 1] score
+              that does NOT depend on what other features happen to be in the
+              analysis, and is comparable across runs.
+
+            - regression: 'relative_mi' -- mutual_info divided by the
+              strongest feature's mutual_info *within this analysis only*.
+              Continuous (differential) mutual information has no natural
+              fixed upper bound the way discrete entropy does, so there is no
+              defensible [0, 1] absolute score to compute here. relative_mi
+              is intentionally NOT called "normalized_mi": a value of 1.0
+              means "the best feature among those analyzed here," not "a
+              strong predictor in absolute terms" -- if every feature is pure
+              noise, the noisiest-by-chance feature still scores 1.0. Use the
+              raw 'mutual_info' column for any absolute-magnitude judgment or
+              cross-run comparison.
         """
         if feature_columns is None:
             feature_columns = get_feature_columns(self.df, exclude_columns=[self.target_column], numeric_only=False)
@@ -444,6 +464,26 @@ class StatisticalMixin:
         if not numeric_features:
             logger.warning("No numeric features found for mutual information analysis")
             return pd.DataFrame()
+
+        # fillna(0) is required by sklearn's MI estimators (they don't accept NaN),
+        # but silently treating missing values as 0 fabricates a fake mode if 0 is
+        # also a real, in-range observed value for a feature -- warn so callers can
+        # judge whether that's appropriate, matching the imputation warnings used
+        # elsewhere in the toolkit (e.g. DataPreprocessor's mode-imputation warning).
+        nan_counts = self.df[numeric_features].isna().sum()
+        cols_with_nan = nan_counts[nan_counts > 0]
+        if len(cols_with_nan) > 0:
+            preview = ', '.join(cols_with_nan.index.tolist()[:5])
+            more = ', ...' if len(cols_with_nan) > 5 else ''
+            logger.warning(
+                f"Filling {int(cols_with_nan.sum())} missing value(s) with 0 across "
+                f"{len(cols_with_nan)} feature(s) before computing mutual information: "
+                f"{preview}{more}. If 0 is a meaningful, in-range value for these "
+                "features (not just 'missing'), this imputation can bias the mutual "
+                "information estimate unpredictably. Consider imputing missing values "
+                "explicitly (e.g. via DataPreprocessor.handle_missing_values()) before "
+                "calling analyze_mutual_information()."
+            )
 
         X = self.df[numeric_features].fillna(0)
         y = self.df[self.target_column].dropna()
@@ -459,20 +499,31 @@ class StatisticalMixin:
         try:
             if self.task == 'classification':
                 mi_scores = mutual_info_classif(X, y, random_state=42)
+
+                # Fixed absolute bound (see docstring): does not depend on other
+                # features' scores, so a feature can only approach 1.0 by genuinely
+                # nearing full determination of the target.
+                max_mi = np.log(len(np.unique(y)))
+                normalized_mi = mi_scores / max_mi if max_mi > 0 else np.zeros_like(mi_scores)
+
+                results = pd.DataFrame({
+                    'feature': numeric_features,
+                    'mutual_info': mi_scores,
+                    'normalized_mi': normalized_mi
+                })
             else:
                 mi_scores = mutual_info_regression(X, y, random_state=42)
 
-            max_mi = np.log(len(np.unique(y))) if self.task == 'classification' else np.max(mi_scores)
-            if max_mi > 0:
-                normalized_mi = mi_scores / max_mi
-            else:
-                normalized_mi = mi_scores
+                # Relative-rank aid only -- see docstring for why regression has no
+                # defensible absolute [0, 1] normalization the way classification does.
+                max_mi = np.max(mi_scores)
+                relative_mi = mi_scores / max_mi if max_mi > 0 else np.zeros_like(mi_scores)
 
-            results = pd.DataFrame({
-                'feature': numeric_features,
-                'mutual_info': mi_scores,
-                'normalized_mi': normalized_mi
-            })
+                results = pd.DataFrame({
+                    'feature': numeric_features,
+                    'mutual_info': mi_scores,
+                    'relative_mi': relative_mi
+                })
 
             results = results.sort_values('mutual_info', ascending=False)
             return results

@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Pandas 3.0 compatibility** - `clean_string_columns()`, `handle_whitespace_variants()`, `extract_string_length()`, and `get_categorical_summary()` silently no-op'd on string columns under pandas >= 3.0, which defaults string columns built from Python literals to a native `StringDtype` instead of `object`. Added a version-proof string-dtype check (`utils._is_string_like_dtype()`) used everywhere the toolkit was doing `dtype == 'object'`-based detection.
 - **`handle_outliers()` cap action on integer columns** - assigning float cap bounds into an `int64` column via `.loc` now raises under pandas >= 3.0 instead of silently upcasting; integer columns are upcast to float before the cap assignment.
+- **Pandas dtype fragility, round 2** - follow-up audit found the round-1 fix above was incomplete, plus one unrelated bug in the same class:
+  - `utils.validate_numeric_columns()` raised `TypeError: Cannot interpret 'Int64Dtype()' as a data type` on pandas nullable dtypes (`Int64`, `Float64`, `boolean`) because it used `np.issubdtype(dtype, np.number)`. Switched to `pd.api.types.is_numeric_dtype()`, matching how `get_numeric_columns()` already handles these dtypes via `select_dtypes`. This crash previously broke `handle_outliers()`/`clip_values()` in `preprocessing.py` and several `feature_engineering.py` methods (`scale_features`, `create_polynomial_features`, `create_log_transform`, `create_sqrt_transform`, `create_binning`, `create_aggregations`, `create_ratio_features`).
+  - `utils._is_string_like_dtype()` missed pyarrow-backed string columns (`pd.ArrowDtype(pyarrow.string())`, e.g. from `pd.read_parquet(dtype_backend="pyarrow")`) since `pd.ArrowDtype` is a sibling of `pd.StringDtype`, not a subclass. Now detected via an optional pyarrow check (pyarrow stays an optional, not required, dependency).
+  - `utils.get_string_columns()` silently dropped Categorical-dtype columns, causing `clean_string_columns()`, `handle_whitespace_variants()`, and `extract_string_length()` to silently no-op on them. `_is_string_like_dtype()` now treats any Categorical as string-like; `data_analysis.get_categorical_summary()` simplified to rely on this instead of its own separate `select_dtypes(include=['category'])` workaround.
+  - `handle_outliers(action='replace')` crashed with `TypeError: Invalid value ... for dtype 'int64'` when the replacement value (median/mean/nan) was fractional or NaN on an `int64` column; the sibling `action='cap'` branch already had this upcast-to-float fix, `action='replace'` was missed.
+  - `data_analysis.detect_misclassified_categorical()` used a string-literal dtype check (`col_data.dtype in ['int64', 'int32', ...]`) that never matches pandas nullable integer dtypes (`Int64`, etc.); switched to `pd.api.types.is_integer_dtype()`.
+
+### Tests
+
+- Added `tests/test_utils.py` and `tests/test_base.py` (previously no dedicated coverage existed for `utils.py`/`base.py`), plus regression tests for the round-2 dtype-fragility fixes in `tests/test_preprocessing.py` and `tests/test_data_analysis.py`.
 
 ## [2.4.3] - 2026-01-20
 

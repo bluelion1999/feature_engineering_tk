@@ -149,6 +149,29 @@ class TestDataAnalyzer:
         assert 'rating' in misclassified['column'].values
         assert 'continuous' not in misclassified['column'].values
 
+    def test_detect_misclassified_categorical_nullable_integer_dtype(self):
+        """Regression test: pandas nullable Int64 columns should be detected too.
+
+        The integer-column branch used to check
+        `col_data.dtype in ['int64', 'int32', ...]`, a string comparison
+        that never matches pandas' nullable IntegerDtype objects (e.g.
+        pd.Int64Dtype()), silently skipping this detection path for
+        nullable-typed columns. Fixed to use pd.api.types.is_integer_dtype().
+        """
+        # 15 unique values over 150 rows: unique_count (15) is above the
+        # max_unique (10) branch and unique_ratio (0.1) is above
+        # min_unique_ratio (0.05), so only the nullable-integer branch
+        # can flag this column.
+        df = pd.DataFrame({
+            'nullable_rating': pd.array(list(range(15)) * 10, dtype='Int64')
+        })
+        analyzer = DataAnalyzer(df)
+        misclassified = analyzer.detect_misclassified_categorical()
+
+        assert 'nullable_rating' in misclassified['column'].values
+        row = misclassified[misclassified['column'] == 'nullable_rating'].iloc[0]
+        assert 'Integer column' in row['suggestion']
+
     def test_detect_misclassified_categorical_low_unique_ratio(self):
         """Test detection based on low unique ratio."""
         # Create column with many repeated values

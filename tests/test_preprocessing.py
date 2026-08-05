@@ -158,6 +158,67 @@ class TestDataPreprocessor:
         assert result['values'].max() < 100, "Outlier should be capped"
         assert result['values'].max() > 5, "Cap should be above normal values"
 
+    def test_handle_outliers_replace_action_int_column_median(self):
+        """Regression test: replace action on int64 column with fractional median.
+
+        Under pandas >= 3.0, assigning a fractional float (e.g. a median) into
+        an int64 column via .loc raises TypeError instead of silently
+        upcasting. The sibling 'cap' action already upcasts int columns to
+        float before assignment; 'replace' was missing the same fix.
+        """
+        df = pd.DataFrame({'values': [1, 2, 3, 4, 5, 100]})  # int64, median = 3.5
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.handle_outliers(
+            columns=['values'],
+            method='iqr',
+            action='replace',
+            replace_with='median',
+            inplace=False
+        )
+
+        assert len(result) == 6, "Should keep all rows when replacing"
+        assert pd.api.types.is_float_dtype(result['values']), "Column should be upcast to float"
+        assert result.loc[result['values'] == 3.5].shape[0] == 1, "Outlier should be replaced with median"
+
+    def test_handle_outliers_replace_action_int_column_mean(self):
+        """Regression test: replace action on int64 column with fractional mean."""
+        df = pd.DataFrame({'values': [1, 2, 3, 4, 5, 100]})  # int64, mean is fractional
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.handle_outliers(
+            columns=['values'],
+            method='iqr',
+            action='replace',
+            replace_with='mean',
+            inplace=False
+        )
+
+        assert len(result) == 6
+        assert pd.api.types.is_float_dtype(result['values']), "Column should be upcast to float"
+        assert 100 not in result['values'].values, "Outlier should have been replaced"
+
+    def test_handle_outliers_replace_action_int_column_nan(self):
+        """Regression test: replace action with 'nan' on int64 column.
+
+        int64 columns cannot hold NaN at all, so this also requires the
+        upcast-to-float fix (not just fractional-value handling).
+        """
+        df = pd.DataFrame({'values': [1, 2, 3, 4, 5, 100]})  # int64
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.handle_outliers(
+            columns=['values'],
+            method='iqr',
+            action='replace',
+            replace_with='nan',
+            inplace=False
+        )
+
+        assert len(result) == 6
+        assert pd.api.types.is_float_dtype(result['values']), "Column should be upcast to float"
+        assert result['values'].isna().sum() == 1, "Outlier should be replaced with NaN"
+
     def test_input_validation(self, sample_df):
         """Test input validation for various methods."""
         preprocessor = DataPreprocessor(sample_df)
@@ -517,6 +578,33 @@ class TestMethodChaining:
         assert isinstance(result, pd.DataFrame)
         assert not isinstance(result, DataPreprocessor)
 
+    def test_empty_columns_inplace_preserves_chain(self):
+        """Test that handle_missing_values with all-invalid columns + inplace=True
+        still returns self (not a DataFrame), so chaining doesn't break.
+
+        Regression test: previously the early-return for an empty resolved
+        `columns` list did `return df_result` unconditionally, so
+        inplace=True callers got a DataFrame back instead of self, breaking
+        any subsequent chained call.
+        """
+        df = pd.DataFrame({'x': [1, 2, 2, 3], 'y': [4, 5, 5, 6]})
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.handle_missing_values(
+            strategy='mean', columns=['bogus'], inplace=True
+        )
+
+        assert result is preprocessor
+        assert isinstance(result, DataPreprocessor)
+
+        # Chaining another call after it must not raise AttributeError.
+        chained = preprocessor.handle_missing_values(
+            strategy='mean', columns=['bogus'], inplace=True
+        ).remove_duplicates(inplace=True)
+
+        assert chained is preprocessor
+        assert len(preprocessor.df) == 3  # duplicate row removed
+
     def test_chaining_with_new_methods(self):
         """Test chaining with newly added string and validation methods."""
         df = pd.DataFrame({
@@ -758,6 +846,142 @@ class TestOperationHistory:
         assert op['method'] == 'handle_outliers'
         assert 'method' in op['parameters']
         assert 'action' in op['parameters']
+
+    def test_history_tracks_convert_dtypes(self, sample_df):
+        """Test that convert_dtypes operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.convert_dtypes({'c': 'category'}, inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'convert_dtypes'
+
+    def test_history_tracks_clip_values(self, sample_df):
+        """Test that clip_values operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.clip_values('a', lower=2, upper=4, inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'clip_values'
+
+    def test_history_tracks_remove_constant_columns(self, sample_df):
+        """Test that remove_constant_columns operation is tracked."""
+        sample_df['constant'] = 1
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_constant_columns(inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'remove_constant_columns'
+
+    def test_history_tracks_remove_high_cardinality_columns(self, sample_df):
+        """Test that remove_high_cardinality_columns operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.remove_high_cardinality_columns(threshold=0.5, inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'remove_high_cardinality_columns'
+
+    def test_history_tracks_rename_columns(self, sample_df):
+        """Test that rename_columns operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.rename_columns({'a': 'a_renamed'}, inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'rename_columns'
+
+    def test_history_tracks_reorder_columns(self, sample_df):
+        """Test that reorder_columns operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.reorder_columns(['d', 'c'], inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'reorder_columns'
+
+    def test_history_tracks_apply_custom_function(self, sample_df):
+        """Test that apply_custom_function operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.apply_custom_function('a', lambda x: x * 2, inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'apply_custom_function'
+
+    def test_history_tracks_reset_index_clean(self, sample_df):
+        """Test that reset_index_clean operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.reset_index_clean(inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'reset_index_clean'
+
+    def test_history_tracks_sample_data(self, sample_df):
+        """Test that sample_data operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.sample_data(n=3, random_state=42, inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'sample_data'
+
+    def test_history_tracks_handle_whitespace_variants(self, sample_df):
+        """Test that handle_whitespace_variants operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.handle_whitespace_variants(['c'], inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'handle_whitespace_variants'
+
+    def test_history_tracks_extract_string_length(self, sample_df):
+        """Test that extract_string_length operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.extract_string_length(['c'], inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'extract_string_length'
+
+    def test_history_tracks_create_missing_indicators(self, sample_df):
+        """Test that create_missing_indicators operation is tracked."""
+        preprocessor = DataPreprocessor(sample_df)
+        preprocessor.create_missing_indicators(['b'], inplace=True)
+
+        assert len(preprocessor._operation_history) == 1
+        assert preprocessor._operation_history[0]['method'] == 'create_missing_indicators'
+
+    def test_history_comprehensive_workflow_all_newly_tracked_methods(self, sample_df):
+        """End-to-end test chaining several of the newly-covered methods
+        together and verifying full history length and shape tracking."""
+        preprocessor = DataPreprocessor(sample_df)
+
+        preprocessor\
+            .create_missing_indicators(['b'], inplace=True)\
+            .handle_missing_values(strategy='mean', columns=['b'], inplace=True)\
+            .remove_duplicates(inplace=True)\
+            .convert_dtypes({'c': 'category'}, inplace=True)\
+            .clip_values('a', lower=1, upper=4, inplace=True)\
+            .rename_columns({'d': 'd_renamed'}, inplace=True)\
+            .reorder_columns(['c', 'a'], inplace=True)\
+            .reset_index_clean(inplace=True)
+
+        history = preprocessor._operation_history
+        assert len(history) == 8
+
+        expected_methods = [
+            'create_missing_indicators',
+            'handle_missing_values',
+            'remove_duplicates',
+            'convert_dtypes',
+            'clip_values',
+            'rename_columns',
+            'reorder_columns',
+            'reset_index_clean',
+        ]
+        assert [op['method'] for op in history] == expected_methods
+
+        # Shape tracking: started at (6, 4), gained 1 col (indicator),
+        # lost 1 duplicate row, then column count stayed the same
+        # (rename doesn't change count) through the rest of the chain.
+        initial_shape = history[0]['shape_before']
+        final_shape = history[-1]['shape_after']
+        assert initial_shape == (6, 4)
+        assert final_shape[0] == 5  # one duplicate removed
+        assert final_shape[1] == 5  # +1 missing indicator column, net
 
 
 if __name__ == '__main__':

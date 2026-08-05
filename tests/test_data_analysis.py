@@ -86,15 +86,23 @@ class TestDataAnalyzer:
         assert isinstance(high_corr, pd.DataFrame)
 
     def test_calculate_vif(self):
-        """Test VIF calculation in DataAnalyzer."""
-        # Create dataset with known multicollinearity
+        """Test VIF calculation in DataAnalyzer.
+
+        Uses non-zero-mean data (unlike plain np.random.randn(), which is
+        mean ~0 and happens to mask a missing-intercept bug in the VIF
+        design matrix). feature3 is deliberately built as a near-perfect
+        linear combination of feature1, so it should show very high VIF,
+        while feature1/feature2 are independent and should show VIF close
+        to 1.
+        """
         np.random.seed(42)
+        n = 200
         df = pd.DataFrame({
-            'feature1': np.random.randn(100),
-            'feature2': np.random.randn(100),
+            'feature1': np.random.uniform(50, 150, n),
+            'feature2': np.random.uniform(500, 1500, n),
         })
-        # Create highly correlated feature
-        df['feature3'] = df['feature1'] * 0.9 + np.random.randn(100) * 0.1
+        # Create highly correlated feature (near-perfect linear combination)
+        df['feature3'] = df['feature1'] * 0.9 + np.random.randn(n) * 0.1
 
         analyzer = DataAnalyzer(df)
         vif_df = analyzer.calculate_vif()
@@ -104,6 +112,58 @@ class TestDataAnalyzer:
         assert 'feature' in vif_df.columns
         assert 'VIF' in vif_df.columns
         assert len(vif_df) == 3  # All three features
+
+        vif_by_feature = vif_df.set_index('feature')['VIF']
+
+        # feature3 is (almost) collinear with feature1 -> very high VIF
+        assert vif_by_feature['feature1'] > 50
+        assert vif_by_feature['feature3'] > 50
+
+        # feature2 is independent of the others -> VIF should be close to 1,
+        # not inflated by the missing-intercept bug (which produced values
+        # in the hundreds/thousands for non-zero-mean data).
+        assert vif_by_feature['feature2'] == pytest.approx(1.0, abs=1.0)
+
+    def test_calculate_vif_matches_reference_with_intercept(self):
+        """Regression test for the missing-intercept VIF bug.
+
+        variance_inflation_factor() assumes the design matrix already
+        includes a constant/intercept column; VIF is only statistically
+        meaningful relative to a regression that includes one. This test
+        builds a pure-noise column with a large, non-zero mean that is
+        uncorrelated with the other features (true VIF ~1.0) and compares
+        DataAnalyzer.calculate_vif() directly against a reference value
+        computed the correct way (sm.add_constant + variance_inflation_factor).
+        """
+        from statsmodels.stats.outliers_influence import variance_inflation_factor
+        from statsmodels.tools.tools import add_constant
+
+        np.random.seed(0)
+        n = 500
+        x1 = np.random.uniform(50, 150, n)
+        x2 = x1 * 2 + np.random.normal(0, 5, n) + 1000  # correlated w/ x1, large offset
+        x3 = np.random.normal(500, 50, n)  # pure noise, uncorrelated, large mean
+
+        df = pd.DataFrame({'x1': x1, 'x2': x2, 'x3': x3})
+
+        # Reference VIF computed the statistically correct way
+        df_const = add_constant(df, has_constant='add')
+        reference_vif = {
+            col: variance_inflation_factor(df_const.values, i + 1)
+            for i, col in enumerate(df.columns)
+        }
+
+        analyzer = DataAnalyzer(df)
+        vif_df = analyzer.calculate_vif()
+        vif_by_feature = vif_df.set_index('feature')['VIF']
+
+        for col in df.columns:
+            assert vif_by_feature[col] == pytest.approx(reference_vif[col], rel=1e-6)
+
+        # Sanity check on the statistical meaning: x3 is pure, uncorrelated
+        # noise, so its true VIF should be close to 1 (not inflated into the
+        # hundreds, as the missing-intercept bug produced).
+        assert vif_by_feature['x3'] == pytest.approx(1.0, abs=1.0)
 
     def test_calculate_vif_insufficient_columns(self):
         """Test VIF with insufficient columns."""
@@ -148,6 +208,29 @@ class TestDataAnalyzer:
         # Should detect rating as likely categorical
         assert 'rating' in misclassified['column'].values
         assert 'continuous' not in misclassified['column'].values
+
+    def test_detect_misclassified_categorical_nullable_integer_dtype(self):
+        """Regression test: pandas nullable Int64 columns should be detected too.
+
+        The integer-column branch used to check
+        `col_data.dtype in ['int64', 'int32', ...]`, a string comparison
+        that never matches pandas' nullable IntegerDtype objects (e.g.
+        pd.Int64Dtype()), silently skipping this detection path for
+        nullable-typed columns. Fixed to use pd.api.types.is_integer_dtype().
+        """
+        # 15 unique values over 150 rows: unique_count (15) is above the
+        # max_unique (10) branch and unique_ratio (0.1) is above
+        # min_unique_ratio (0.05), so only the nullable-integer branch
+        # can flag this column.
+        df = pd.DataFrame({
+            'nullable_rating': pd.array(list(range(15)) * 10, dtype='Int64')
+        })
+        analyzer = DataAnalyzer(df)
+        misclassified = analyzer.detect_misclassified_categorical()
+
+        assert 'nullable_rating' in misclassified['column'].values
+        row = misclassified[misclassified['column'] == 'nullable_rating'].iloc[0]
+        assert 'Integer column' in row['suggestion']
 
     def test_detect_misclassified_categorical_low_unique_ratio(self):
         """Test detection based on low unique ratio."""

@@ -117,7 +117,7 @@
 **Benchmarking Infrastructure**:
 - Created `benchmarks/` directory with comprehensive benchmark suite
 - Baseline measurements for all critical operations
-- `OPTIMIZATION_PLAN.md` documents implementation strategy and results
+- `docs/planning/OPTIMIZATION_PLAN.md` documents implementation strategy and results
 
 **Benefits**:
 - Single source of truth for validation operations
@@ -962,7 +962,7 @@ Comprehensive performance optimization focused on eliminating bottlenecks in sta
 **Created Files**:
 - `benchmarks/benchmark_suite.py`: Comprehensive benchmark suite
 - `benchmarks/__init__.py`: Package initialization
-- `OPTIMIZATION_PLAN.md`: Detailed optimization strategy and results
+- `docs/planning/OPTIMIZATION_PLAN.md`: Detailed optimization strategy and results
 - `baseline_results.json`: Performance baseline measurements
 
 **Benchmark Results**:
@@ -985,7 +985,7 @@ DataFrame init (1M rows)            231ms     255ms    Within variance
 - `feature_engineering_tk/utils.py`: String validation optimization
 - `feature_engineering_tk/data_analysis.py`: N+1 pattern fixes in TargetAnalyzer
 - `benchmarks/benchmark_suite.py`: New benchmarking infrastructure
-- `OPTIMIZATION_PLAN.md`: Optimization documentation
+- `docs/planning/OPTIMIZATION_PLAN.md`: Optimization documentation
 
 ---
 

@@ -109,7 +109,7 @@ class QualityMixin:
                         'reason': (
                             f'Extremely significant relationship (p={row["pvalue"]:.2e}) AND '
                             f'large effect size ('
-                            f'{"eta²" if "ANOVA" in row.get("test_type", "") else "Cramer\'s V"}'
+                            f'{"eta²" if "ANOVA" in row.get("test_type", "") else "Cramers V"}'
                             f'={row["effect_size"]:.3f}, {row.get("effect_interpretation", "large")})'
                         ),
                         'severity': 'medium'

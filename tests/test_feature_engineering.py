@@ -179,6 +179,133 @@ class TestFeatureEngineer:
         with pytest.raises(ValueError, match="degree must be 2 or 3"):
             engineer.create_polynomial_features(['numeric1'], degree=5)
 
+    # -- encode_categorical_onehot --------------------------------------
+    #
+    # Pins down the pre-existing pd.get_dummies()-based output contract
+    # (column naming/dtype) while also covering the encoder-storage fix:
+    # self.encoders should now be populated, matching encode_categorical_label
+    # and encode_categorical_ordinal.
+
+    def test_onehot_output_column_naming_unchanged(self, sample_df):
+        """Output columns/dtype should still match historical pd.get_dummies() behavior."""
+        engineer = FeatureEngineer(sample_df)
+
+        result = engineer.encode_categorical_onehot(['categorical'], inplace=False)
+
+        # Original categorical column replaced by one dummy column per category
+        assert 'categorical' not in result.columns
+        for expected_col in ['categorical_A', 'categorical_B', 'categorical_C']:
+            assert expected_col in result.columns
+            assert pd.api.types.is_integer_dtype(result[expected_col])
+
+        # Values match get_dummies semantics
+        assert result.loc[0, 'categorical_A'] == 1
+        assert result.loc[0, 'categorical_B'] == 0
+        assert result.loc[1, 'categorical_B'] == 1
+
+    def test_onehot_inplace_false_does_not_modify_original(self, sample_df):
+        """inplace=False must not mutate the internal dataframe."""
+        engineer = FeatureEngineer(sample_df)
+
+        result = engineer.encode_categorical_onehot(['categorical'], inplace=False)
+
+        assert 'categorical' in engineer.df.columns
+        assert 'categorical_A' not in engineer.df.columns
+        assert 'categorical_A' in result.columns
+
+    def test_onehot_inplace_true_returns_self_and_updates_df(self, sample_df):
+        """inplace=True should update self.df and return self for chaining."""
+        engineer = FeatureEngineer(sample_df)
+
+        result = engineer.encode_categorical_onehot(['categorical'], inplace=True)
+
+        assert result is engineer
+        assert 'categorical' not in engineer.df.columns
+        assert 'categorical_A' in engineer.df.columns
+
+    def test_onehot_populates_encoders_inplace_false(self, sample_df):
+        """Bug fix: self.encoders should be populated even with inplace=False."""
+        from sklearn.preprocessing import OneHotEncoder
+
+        engineer = FeatureEngineer(sample_df)
+        engineer.encode_categorical_onehot(['categorical'], inplace=False)
+
+        assert 'categorical_onehot' in engineer.encoders
+        assert isinstance(engineer.encoders['categorical_onehot'], OneHotEncoder)
+
+    def test_onehot_populates_encoders_inplace_true(self, sample_df):
+        """Bug fix: self.encoders should be populated with inplace=True too."""
+        from sklearn.preprocessing import OneHotEncoder
+
+        engineer = FeatureEngineer(sample_df)
+        engineer.encode_categorical_onehot(['categorical'], inplace=True)
+
+        assert 'categorical_onehot' in engineer.encoders
+        assert isinstance(engineer.encoders['categorical_onehot'], OneHotEncoder)
+
+    def test_onehot_save_and_load_transformers_roundtrip(self, sample_df):
+        """The stored OneHotEncoder should survive save_transformers()/load_transformers()."""
+        engineer = FeatureEngineer(sample_df)
+        engineer.encode_categorical_onehot(['categorical'], inplace=True)
+
+        with tempfile.NamedTemporaryFile(suffix='.joblib', delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            engineer.save_transformers(tmp_path)
+
+            new_engineer = FeatureEngineer(sample_df)
+            assert 'categorical_onehot' not in new_engineer.encoders
+
+            new_engineer.load_transformers(tmp_path)
+
+            assert 'categorical_onehot' in new_engineer.encoders
+            loaded_encoder = new_engineer.encoders['categorical_onehot']
+            # Loaded encoder is fitted and usable for transforming new data
+            transformed = loaded_encoder.transform([['A']])
+            assert transformed.shape[1] == 3  # A, B, C
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    def test_onehot_loaded_encoder_handles_unseen_category(self, sample_df):
+        """Stored encoder uses handle_unknown='ignore' so unseen categories at
+        inference time don't raise - they encode to all zeros instead."""
+        engineer = FeatureEngineer(sample_df)
+        engineer.encode_categorical_onehot(['categorical'], inplace=True)
+
+        with tempfile.NamedTemporaryFile(suffix='.joblib', delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            engineer.save_transformers(tmp_path)
+
+            new_engineer = FeatureEngineer(sample_df)
+            new_engineer.load_transformers(tmp_path)
+            loaded_encoder = new_engineer.encoders['categorical_onehot']
+
+            # 'D' was never seen during fit
+            transformed = loaded_encoder.transform([['D']])
+            assert transformed.sum() == 0
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    def test_onehot_dummy_na_parameter(self):
+        """dummy_na=True should add an explicit indicator column for missing values
+        instead of silently encoding NaN rows as all-zero."""
+        df = pd.DataFrame({'categorical': ['A', 'B', None, 'A']})
+        engineer = FeatureEngineer(df)
+
+        result_default = engineer.encode_categorical_onehot(['categorical'], inplace=False)
+        assert 'categorical_nan' not in result_default.columns
+        # Missing value row is all-zero across dummy columns (historical behavior)
+        assert result_default.loc[2].sum() == 0
+
+        result_dummy_na = engineer.encode_categorical_onehot(
+            ['categorical'], dummy_na=True, inplace=False
+        )
+        assert 'categorical_nan' in result_dummy_na.columns
+        assert result_dummy_na.loc[2, 'categorical_nan'] == 1
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

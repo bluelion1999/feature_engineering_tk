@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional
 from scipy import stats
 
 from ..base import FeatureEngineeringBase
+from ..data_analysis import DataAnalyzer
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -225,6 +226,14 @@ class TargetAnalyzerCore(FeatureEngineeringBase):
             'skewness': target.skew(),
             'kurtosis': target.kurtosis()
         }
+
+        # Outlier detection (delegates to DataAnalyzer's existing IQR-based detection,
+        # consistent with the project's pattern of reusing DataAnalyzer for outlier logic)
+        analyzer = DataAnalyzer(pd.DataFrame({self.target_column: target}))
+        outlier_result = analyzer.detect_outliers_iqr(columns=[self.target_column])
+        outlier_mask = outlier_result.get(self.target_column)
+        distribution['has_outliers'] = bool(outlier_mask is not None and outlier_mask.any())
+        distribution['outlier_count'] = int(outlier_mask.sum()) if outlier_mask is not None else 0
 
         # Normality test (sample if dataset is large)
         if len(target) >= 3:

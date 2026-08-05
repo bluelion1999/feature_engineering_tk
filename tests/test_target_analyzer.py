@@ -663,6 +663,70 @@ class TestPhase4CommonFeatures:
 
         assert len(quality['leakage_suspects']) > 0
 
+    def test_data_quality_leakage_detection_classification_large_n_negligible_effect(self):
+        """Regression test: large-N + negligible true effect must NOT be flagged as leakage.
+
+        This is the exact false-positive scenario the effect-size gate fixes: with a
+        large enough sample, even a genuinely negligible relationship (eta^2 well below
+        the 'small' effect threshold of 0.01) produces a p-value far below 1e-10 purely
+        from sample size, not from any real leakage. Before the effect-size gate, the
+        old p-value-only check flagged this as an 'Extremely significant relationship'.
+        """
+        np.random.seed(0)
+        n = 500_000
+        target = np.random.choice([0, 1], n)
+        # Tiny true mean shift between classes (0.03) buried in unit-variance noise --
+        # a negligible real effect that nonetheless yields p << 1e-10 at this sample size.
+        feature_small_effect = np.random.randn(n) + target * 0.03
+        df = pd.DataFrame({
+            'feature_small_effect': feature_small_effect,
+            'target': target
+        })
+
+        analyzer = TargetAnalyzer(df, target_column='target')
+
+        # Sanity check: the p-value alone would have tripped the old, unguarded check.
+        rel_df = analyzer.analyze_feature_target_relationship(report_effect_sizes=True)
+        row = rel_df[rel_df['feature'] == 'feature_small_effect'].iloc[0]
+        assert row['pvalue'] < 1e-10
+        assert row['effect_interpretation'] == 'negligible'
+
+        quality = analyzer.analyze_data_quality()
+        flagged_features = [s['feature'] for s in quality['leakage_suspects']]
+        assert 'feature_small_effect' not in flagged_features
+
+    def test_data_quality_leakage_detection_classification_true_leakage(self):
+        """Genuine classification leakage (near-perfect proxy for target) must still be flagged.
+
+        Guards against the effect-size gate being so strict that it suppresses real
+        leakage detection: a feature that is essentially the target plus tiny noise
+        should have both an extremely small p-value and a 'large' effect size
+        (eta-squared close to 1.0), and must be reported as a leakage suspect.
+        """
+        np.random.seed(1)
+        n = 1000
+        target = np.random.choice([0, 1], n)
+        # Near-perfect numeric proxy for the target (the "feature basically IS the
+        # target" case leakage detection is meant to catch).
+        feature_leaky = target + np.random.randn(n) * 0.01
+        feature_benign = np.random.randn(n)
+        df = pd.DataFrame({
+            'feature_leaky': feature_leaky,
+            'feature_benign': feature_benign,
+            'target': target
+        })
+
+        analyzer = TargetAnalyzer(df, target_column='target')
+        quality = analyzer.analyze_data_quality()
+
+        flagged_features = [s['feature'] for s in quality['leakage_suspects']]
+        assert 'feature_leaky' in flagged_features
+        assert 'feature_benign' not in flagged_features
+
+        leaky_suspect = next(s for s in quality['leakage_suspects'] if s['feature'] == 'feature_leaky')
+        assert 'p=' in leaky_suspect['reason']
+        assert 'effect size' in leaky_suspect['reason']
+
     def test_data_quality_missing_values(self):
         """Test missing value detection"""
         df = pd.DataFrame({

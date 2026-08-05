@@ -69,14 +69,49 @@ class QualityMixin:
                 ])
 
         elif self.task == 'classification':
-            # Check for features with very low p-values and high test statistics
-            rel_df = self.analyze_feature_target_relationship()
-            if not rel_df.empty:
-                suspicious = rel_df[rel_df['pvalue'] < 1e-10]
+            # Check for features with very low p-values AND a large effect size.
+            #
+            # P-value alone is not a valid leakage signal: with enough rows, even a
+            # trivially small true effect produces a vanishingly small p-value
+            # (p shrinks toward 0 as N grows, independent of effect magnitude). At
+            # large N, "p < 1e-10" is common for features with no practical
+            # relationship to the target and must not be treated as evidence of
+            # leakage on its own. This mirrors why the regression branch above
+            # gates on correlation magnitude (> 0.99) rather than p-value.
+            #
+            # We reuse analyze_feature_target_relationship()'s effect-size support
+            # (eta-squared for ANOVA F-test / numeric features, Cramer's V for
+            # chi-square / categorical features, both from statistical_utils.py)
+            # instead of recomputing the underlying tests here.
+            #
+            # Threshold choice: statistical_utils's own "large" cutoffs (eta^2 >=
+            # 0.14 per Cohen's convention; Cramer's V >= ~0.29-0.5 depending on
+            # table size) describe a strong *real* relationship, which is exactly
+            # the kind of legitimate strong predictor this detector must not flag.
+            # Leakage detection specifically wants "the feature basically IS the
+            # target" (e.g. a proxy/derived column) -- a much narrower, near-
+            # deterministic case. We use a stricter, leakage-specific threshold of
+            # 0.8 (80%+ of variance/association explained) for both eta-squared
+            # and Cramer's V, chosen to be in the same "near-total" spirit as the
+            # regression branch's correlation > 0.99 (r^2 > 0.98) leakage gate,
+            # while remaining reachable on eta^2/Cramer's V's bounded [0, 1] scale.
+            LEAKAGE_EFFECT_SIZE_THRESHOLD = 0.8
+
+            rel_df = self.analyze_feature_target_relationship(report_effect_sizes=True)
+            if not rel_df.empty and 'effect_size' in rel_df.columns:
+                suspicious = rel_df[
+                    (rel_df['pvalue'] < 1e-10) &
+                    (rel_df['effect_size'] >= LEAKAGE_EFFECT_SIZE_THRESHOLD)
+                ]
                 leakage_suspects.extend([
                     {
                         'feature': row['feature'],
-                        'reason': f'Extremely significant relationship (p={row["pvalue"]:.2e})',
+                        'reason': (
+                            f'Extremely significant relationship (p={row["pvalue"]:.2e}) AND '
+                            f'large effect size ('
+                            f'{"eta²" if "ANOVA" in row.get("test_type", "") else "Cramer\'s V"}'
+                            f'={row["effect_size"]:.3f}, {row.get("effect_interpretation", "large")})'
+                        ),
                         'severity': 'medium'
                     }
                     for row in suspicious.to_dict('records')

@@ -46,13 +46,24 @@ def check_normality(data: Union[np.ndarray, pd.Series],
     Args:
         data: Data to test for normality
         method: Test to use ('shapiro', 'normaltest', 'anderson')
-        alpha: Significance level (default 0.05)
+        alpha: Significance level (default 0.05). For method='anderson' on
+            scipy >= 1.17, the p-value is interpolated from scipy's
+            Anderson-Darling critical value table for the normal
+            distribution, which only covers significance levels from 1% to
+            15% (i.e. alpha in [0.01, 0.15]). Requesting an alpha outside
+            that range still returns a usable result, but the interpolated
+            p-value saturates at the nearest boundary (0.01 or 0.15) and a
+            warning is logged. On scipy < 1.17 (no `method=` support in
+            `scipy.stats.anderson`), alpha is instead matched to the
+            closest of scipy's fixed significance levels (15%, 10%, 5%,
+            2.5%, 1%) against the legacy critical-value table, with a
+            warning if the match isn't exact.
 
     Returns:
         Dictionary containing:
         - test_name: Name of test performed
         - statistic: Test statistic
-        - pvalue: P-value (if applicable)
+        - pvalue: P-value (interpolated for 'anderson'; see above)
         - is_normal: Boolean indicating if data appears normal
         - recommendation: Suggested course of action
         - sample_size: Actual sample size tested
@@ -95,17 +106,56 @@ def check_normality(data: Union[np.ndarray, pd.Series],
         statistic, pvalue = stats.normaltest(data_clean)
         test_name = "D'Agostino-Pearson"
     elif method == 'anderson':
-        result = stats.anderson(data_clean)
-        statistic = result.statistic
-        # Anderson-Darling uses critical values, not p-values
-        # Use 5% significance level (index 2 typically corresponds to 5%)
-        critical_value = result.critical_values[2]
-        pvalue = None
-        is_normal = statistic < critical_value
+        # scipy >= 1.17 requires an explicit `method` to compute a p-value;
+        # without it, `anderson()` emits a FutureWarning and, as of scipy
+        # 1.19, drops `critical_values`/`significance_level`/`fit_result`
+        # entirely. Using method='interpolate' opts into the non-deprecated
+        # code path and returns a p-value interpolated from the same
+        # critical-value table, which lets us honor an arbitrary `alpha`
+        # the same way the shapiro/normaltest branches do. That table only
+        # spans significance levels 1%-15% for the normal distribution, so
+        # the interpolated p-value saturates at 0.01 or 0.15 for alpha
+        # requested outside that range.
+        #
+        # scipy < 1.17 doesn't accept `method=` at all (raises TypeError),
+        # so we fall back to the legacy critical_values/significance_level
+        # table there and match `alpha` to the closest of scipy's fixed
+        # significance levels instead of silently ignoring it.
+        anderson_alpha_range = (0.01, 0.15)
+        try:
+            result = stats.anderson(data_clean, dist='norm', method='interpolate')
+            statistic = result.statistic
+            pvalue = result.pvalue
+            critical_value = None
+            if not (anderson_alpha_range[0] <= alpha <= anderson_alpha_range[1]):
+                logger.warning(
+                    f"alpha={alpha} is outside the range scipy's Anderson-Darling "
+                    f"p-value table supports for the normal distribution "
+                    f"({anderson_alpha_range[0]}-{anderson_alpha_range[1]}). The "
+                    f"interpolated p-value will saturate at the nearest boundary, "
+                    f"so the is_normal result may be imprecise."
+                )
+            is_normal = pvalue > alpha
+        except TypeError:
+            result = stats.anderson(data_clean, dist='norm')
+            statistic = result.statistic
+            pvalue = None
+            significance_levels = np.asarray(result.significance_level) / 100.0
+            idx = int(np.argmin(np.abs(significance_levels - alpha)))
+            critical_value = result.critical_values[idx]
+            matched_alpha = significance_levels[idx]
+            if not np.isclose(matched_alpha, alpha, atol=1e-9):
+                logger.warning(
+                    f"This scipy version's Anderson-Darling API only supports a "
+                    f"fixed set of significance levels ({significance_levels.tolist()}); "
+                    f"alpha={alpha} was mapped to the closest one, {matched_alpha}."
+                )
+            is_normal = statistic < critical_value
+
         return {
             'test_name': 'Anderson-Darling',
             'statistic': statistic,
-            'pvalue': None,
+            'pvalue': pvalue,
             'critical_value': critical_value,
             'is_normal': is_normal,
             'recommendation': 'Use parametric methods' if is_normal else 'Use non-parametric methods',

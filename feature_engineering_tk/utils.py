@@ -19,8 +19,12 @@ def _is_string_like_dtype(dtype) -> bool:
 
     Matches classic object dtype (unconditionally, same as historical
     behavior - object columns are treated as string columns regardless of
-    actual contents) plus pandas' native StringDtype, which pandas >= 3.0
-    uses by default for columns built from Python string literals.
+    actual contents), pandas' native StringDtype (default for string columns
+    in pandas >= 3.0), pyarrow-backed string columns (pd.ArrowDtype wrapping
+    a pyarrow string type, e.g. from pd.read_parquet(dtype_backend="pyarrow")),
+    and Categorical columns (treated as string-like unconditionally, matching
+    this toolkit's historical treatment of categoricals as categorical
+    summary/cleanup targets regardless of the category values' own dtype).
 
     Args:
         dtype: A pandas/numpy dtype instance (e.g. from Series.dtype)
@@ -28,7 +32,20 @@ def _is_string_like_dtype(dtype) -> bool:
     Returns:
         True if the dtype should be treated as a string column
     """
-    return dtype == 'object' or isinstance(dtype, pd.StringDtype)
+    if dtype == 'object' or isinstance(dtype, (pd.StringDtype, pd.CategoricalDtype)):
+        return True
+
+    # pd.ArrowDtype is a sibling of pd.StringDtype, not a subclass, so it
+    # needs its own check. pyarrow isn't a hard dependency of this project,
+    # so guard the import and skip this check gracefully if it's absent.
+    if isinstance(dtype, pd.ArrowDtype):
+        try:
+            import pyarrow as pa
+            return pa.types.is_string(dtype.pyarrow_dtype) or pa.types.is_large_string(dtype.pyarrow_dtype)
+        except ImportError:
+            return False
+
+    return False
 
 
 def validate_and_copy_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -143,7 +160,11 @@ def validate_numeric_columns(
             logger.warning(f"Column '{col}' not found in DataFrame, skipping")
             continue
 
-        if not np.issubdtype(df[col].dtype, np.number):
+        # pd.api.types.is_numeric_dtype() (unlike np.issubdtype, which
+        # raises TypeError on pandas nullable/extension dtypes such as
+        # Int64, Float64, boolean) correctly recognizes both numpy and
+        # pandas-native numeric dtypes.
+        if not pd.api.types.is_numeric_dtype(df[col]):
             logger.warning(f"Column '{col}' is not numeric type, skipping")
             continue
 

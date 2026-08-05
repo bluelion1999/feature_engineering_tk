@@ -81,15 +81,29 @@ class FeatureEngineer(FeatureEngineeringBase):
         return df_result
 
     def encode_categorical_onehot(self, columns: List[str], drop_first: bool = False,
-                                   prefix: Optional[Dict[str, str]] = None,
-                                   inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
+                                  prefix: Optional[Dict[str, str]] = None,
+                                  dummy_na: bool = False,
+                                  inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Encode categorical columns using one-hot encoding.
+
+        The resulting columns/values are produced by `pandas.get_dummies()` to
+        preserve this method's existing output naming/dtype behavior. In
+        addition, a `sklearn.preprocessing.OneHotEncoder` is independently
+        fit on each column and stored in `self.encoders` (keyed
+        `f"{col}_onehot"`), matching the fit/store contract used by
+        `encode_categorical_label()`/`encode_categorical_ordinal()` and
+        enabling `save_transformers()`/`load_transformers()` plus consistent
+        handling of unseen categories at inference time via the stored
+        encoder's `handle_unknown='ignore'` setting.
 
         Args:
             columns: List of columns to encode
             drop_first: Drop first category to avoid multicollinearity
             prefix: Dictionary mapping column names to prefixes for encoded columns
+            dummy_na: If True, adds a column to indicate missing values (NaNs)
+                instead of silently encoding them as an all-zero row. Default False
+                (matches historical behavior).
             inplace: If True, modifies internal dataframe. Default False.
 
         Returns:
@@ -112,10 +126,20 @@ class FeatureEngineer(FeatureEngineeringBase):
                 logger.warning(f"Column '{col}' has {unique_count} unique values. "
                              "Consider using other encoding methods for high cardinality.")
 
+            # Fit-and-store a OneHotEncoder independently of the pd.get_dummies()
+            # transform below. This is what actually gets persisted via
+            # save_transformers()/load_transformers() - the get_dummies() call
+            # remains the source of the returned DataFrame's columns/values so
+            # this fix doesn't change the method's existing output contract.
+            encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+            encoder.fit(df_result[[col]].astype(str))
+            self.encoders[f"{col}_onehot"] = encoder
+
             dummies = pd.get_dummies(
                 df_result[col],
                 prefix=prefix.get(col, col),
                 drop_first=drop_first,
+                dummy_na=dummy_na,
                 dtype=int
             )
 

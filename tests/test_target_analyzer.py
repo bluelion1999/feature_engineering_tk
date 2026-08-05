@@ -1211,6 +1211,63 @@ class TestPhase8ModelRecommendations:
         # May or may not detect outliers depending on distribution
         assert isinstance(recommendations, list)
 
+    def test_recommend_models_huber_fires_for_extreme_target_outliers(self):
+        """Huber Regressor should be recommended when the target has genuine extreme outliers.
+
+        Regression test for a bug where has_outliers was always False because
+        analyze_target_distribution() never populated the key that recommend_models()
+        read from. Target distribution is mostly clustered 5-15 with a handful of
+        values at 1000+, which is an unambiguous IQR-outlier case.
+        """
+        np.random.seed(42)
+        normal_values = np.random.uniform(5, 15, 190)
+        extreme_outliers = np.array([1000, 1200, 1100, 950, 1050])
+        target = np.concatenate([normal_values, extreme_outliers])
+
+        df = pd.DataFrame({
+            'feature1': np.random.randn(195),
+            'feature2': np.random.randn(195),
+            'target': target
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+
+        # Sanity check: outlier detection actually flagged the target
+        target_dist = analyzer.analyze_target_distribution()
+        assert target_dist['has_outliers'] is True
+        assert target_dist['outlier_count'] > 0
+
+        recommendations = analyzer.recommend_models()
+        huber_recs = [r for r in recommendations if r['model'] == 'Huber Regressor']
+        assert len(huber_recs) == 1
+        assert 'outlier' in huber_recs[0]['reason'].lower()
+
+    def test_recommend_models_no_huber_for_clean_target(self):
+        """Huber Regressor should NOT be recommended for a clean regression target.
+
+        Companion to test_recommend_models_huber_fires_for_extreme_target_outliers:
+        proves the branch is not always-on now that it actually reads real outlier
+        detection results.
+        """
+        np.random.seed(42)
+        target = np.random.uniform(5, 15, 200)  # Tight, no extreme values
+
+        df = pd.DataFrame({
+            'feature1': np.random.randn(200),
+            'feature2': np.random.randn(200),
+            'target': target
+        })
+
+        analyzer = TargetAnalyzer(df, 'target')
+
+        target_dist = analyzer.analyze_target_distribution()
+        assert target_dist['has_outliers'] is False
+        assert target_dist['outlier_count'] == 0
+
+        recommendations = analyzer.recommend_models()
+        huber_recs = [r for r in recommendations if r['model'] == 'Huber Regressor']
+        assert len(huber_recs) == 0
+
     def test_recommendations_sorted_by_priority(self, regression_df):
         """Test that recommendations are sorted by priority."""
         analyzer = TargetAnalyzer(regression_df, 'target')

@@ -1,5 +1,10 @@
 # Critical Optimizations Implementation Plan
 
+> **Archived - Completed.** Phases 1-2 shipped in v2.3.0 (2025-12-10);
+> Phase 3 (copy-on-write) was deliberately deferred - see `CLAUDE.md`'s
+> "Performance Optimizations (2025-12-10)" section for the live record of
+> what shipped and the actual before/after numbers.
+
 ## Baseline Performance Metrics
 
 | Operation | Current Performance | Target Performance | Impact |

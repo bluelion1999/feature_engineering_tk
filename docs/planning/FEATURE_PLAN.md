@@ -1,7 +1,12 @@
 # Feature Plan: Enhanced Stats Reporting
 
+> **Archived - Completed.** This plan shipped as `TargetAnalyzer` (Phases
+> 1-8) across v2.1.0-v2.4.0. It's kept here for historical implementation
+> detail; `CLAUDE.md`'s "Recent Major Changes" section is the live record
+> of what actually shipped and when.
+
 **Branch**: feature/enhanced-stats-reporting
-**Status**: Planning
+**Status**: Completed (see note above)
 **Target Module**: data_analysis.py
 
 ## Overview

@@ -386,6 +386,13 @@ class DataPreprocessor(FeatureEngineeringBase):
                     logger.info(f"Capped outliers in '{col}' using z-score method (threshold={threshold})")
 
             elif action == 'replace':
+                # Replacement values (median/mean) are always float, and 'nan'
+                # requires float too; upcast integer columns first so the
+                # assignment below doesn't raise (pandas >= 3.0 no longer
+                # silently upcasts int64 columns on a float .loc assignment).
+                if pd.api.types.is_integer_dtype(df_result[col]):
+                    df_result[col] = df_result[col].astype(float)
+
                 if replace_with == 'median':
                     df_result.loc[outlier_mask, col] = df_result[col].median()
                 elif replace_with == 'mean':

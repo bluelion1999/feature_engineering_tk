@@ -31,6 +31,19 @@
 ---
 
 ### Version 2.4.2 Release (2026-01-20)
+**Status**: Completed
+**Focus**: Tutorials and select_features_auto() fix
+
+#### Changes
+- Added quickstart and in-depth tutorial notebooks under `examples/`
+- **Fixed `select_features_auto()`** in `feature_selection.py` - previously did not return an accessible reference to the underlying `FeatureSelector`; now returns the object so callers can inspect `selected_features` / `feature_scores` after the pipeline runs
+- Bug fixes in the tutorial notebooks so they run end-to-end against the current API
+
+**Benefits**: Working, runnable onboarding material; `select_features_auto()` usable in the documented pipeline pattern without a workaround
+
+---
+
+### Version 2.4.1 Release (2026-01-15)
 **Status**: Completed on fly_catcher branch
 **Focus**: Critical bug fixes using test-driven development
 

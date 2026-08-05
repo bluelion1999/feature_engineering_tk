@@ -42,8 +42,11 @@ class TestFeatureEngineer:
 
         result = engineer.encode_categorical_label(['categorical'], inplace=False)
 
-        # Original should be unchanged
-        assert engineer.df['categorical'].dtype == 'object'
+        # Original should be unchanged (still string-like: 'object' on
+        # pandas < 3.0, native StringDtype by default on pandas >= 3.0 -
+        # isinstance check since its .name varies, e.g. 'str' in pandas 3.0)
+        original_dtype = engineer.df['categorical'].dtype
+        assert original_dtype == 'object' or isinstance(original_dtype, pd.StringDtype)
         # Result should be encoded
         assert pd.api.types.is_integer_dtype(result['categorical'])
 

@@ -13,6 +13,24 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def _is_string_like_dtype(dtype) -> bool:
+    """
+    Check whether a column dtype should be treated as "string" by the toolkit.
+
+    Matches classic object dtype (unconditionally, same as historical
+    behavior - object columns are treated as string columns regardless of
+    actual contents) plus pandas' native StringDtype, which pandas >= 3.0
+    uses by default for columns built from Python string literals.
+
+    Args:
+        dtype: A pandas/numpy dtype instance (e.g. from Series.dtype)
+
+    Returns:
+        True if the dtype should be treated as a string column
+    """
+    return dtype == 'object' or isinstance(dtype, pd.StringDtype)
+
+
 def validate_and_copy_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     Validate and create a copy of a DataFrame.
@@ -153,7 +171,7 @@ def get_string_columns(
     """
     if columns is None:
         # Get all string columns
-        return df.select_dtypes(include=['object']).columns.tolist()
+        return [col for col in df.columns if _is_string_like_dtype(df[col].dtype)]
     else:
         # Optimized validation using sets
         columns_set = set(df.columns)
@@ -167,7 +185,7 @@ def get_string_columns(
             return []
 
         # Check dtypes without copying DataFrame
-        string_cols = [col for col in valid_cols if df[col].dtype == 'object']
+        string_cols = [col for col in valid_cols if _is_string_like_dtype(df[col].dtype)]
         non_string = set(valid_cols) - set(string_cols)
 
         if non_string:

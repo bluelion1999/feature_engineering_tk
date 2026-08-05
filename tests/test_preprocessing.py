@@ -52,8 +52,11 @@ class TestDataPreprocessor:
         # This was broken before - inplace=False would still modify self.df
         result = preprocessor.convert_dtypes({'categorical': 'category'}, inplace=False)
 
-        # Original should be unchanged
-        assert preprocessor.df['categorical'].dtype == 'object'
+        # Original should be unchanged (still string-like: 'object' on
+        # pandas < 3.0, native StringDtype by default on pandas >= 3.0 -
+        # isinstance check since its .name varies, e.g. 'str' in pandas 3.0)
+        original_dtype = preprocessor.df['categorical'].dtype
+        assert original_dtype == 'object' or isinstance(original_dtype, pd.StringDtype)
         # Result should be modified
         assert result['categorical'].dtype.name == 'category'
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pandas 3.0 compatibility** - `clean_string_columns()`, `handle_whitespace_variants()`, `extract_string_length()`, and `get_categorical_summary()` silently no-op'd on string columns under pandas >= 3.0, which defaults string columns built from Python literals to a native `StringDtype` instead of `object`. Added a version-proof string-dtype check (`utils._is_string_like_dtype()`) used everywhere the toolkit was doing `dtype == 'object'`-based detection.
+- **`handle_outliers()` cap action on integer columns** - assigning float cap bounds into an `int64` column via `.loc` now raises under pandas >= 3.0 instead of silently upcasting; integer columns are upcast to float before the cap assignment.
+
 ## [2.4.3] - 2026-01-20
 
 ### Fixed

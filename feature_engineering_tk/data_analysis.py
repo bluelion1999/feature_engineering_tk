@@ -15,7 +15,8 @@ from .base import FeatureEngineeringBase
 from .utils import (
     validate_columns,
     get_numeric_columns,
-    get_feature_columns
+    get_feature_columns,
+    get_string_columns
 )
 from . import statistical_utils
 
@@ -66,7 +67,10 @@ class DataAnalyzer(FeatureEngineeringBase):
 
     def get_categorical_summary(self, max_unique: int = 50) -> pd.DataFrame:
         """Get summary for categorical columns."""
-        cat_cols = self.df.select_dtypes(include=['object', 'category']).columns
+        # get_string_columns() matches object dtype and pandas' native
+        # StringDtype (default for string columns in pandas >= 3.0);
+        # select_dtypes(include=['category']) covers explicit Categoricals.
+        cat_cols = get_string_columns(self.df) + self.df.select_dtypes(include=['category']).columns.tolist()
 
         if len(cat_cols) == 0:
             return pd.DataFrame()

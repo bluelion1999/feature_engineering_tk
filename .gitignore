@@ -136,9 +136,7 @@ Thumbs.db
 # Project specific
 
 
-# Claude Code - Personal Settings Only
-# Team-shared agents, skills, and settings.json are committed
-.claude/settings.local.json
-.claude/.session
-.claude/cache/
-.claude/temp/
+# Claude Code - local tooling only, not shipped with the public package/repo
+# Agents, skills, and settings.json live on disk and are used locally but
+# are intentionally excluded from git; see CONTRIBUTING.md.
+.claude/

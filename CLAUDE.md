@@ -80,7 +80,7 @@
 
 #### Testing & Documentation
 - Added 29 comprehensive tests (211 total: 182 baseline + 29 new)
-- Comprehensive README and claude.md documentation
+- Comprehensive README and CLAUDE.md documentation
 - Full API documentation for all statistical utilities
 
 **Benefits**: Valid statistical tests, controlled error rates, practical significance measures, uncertainty quantification
@@ -311,7 +311,7 @@ mltoolkit/
 │   └── test_plotting.py
 ├── setup.py
 ├── README.md
-└── claude.md                  # This file
+└── CLAUDE.md                  # This file
 ```
 
 ---

@@ -213,7 +213,7 @@ report = analyzer.generate_report(format='dict')
 - Keep backward compatibility with existing DataAnalyzer class
 - Consider adding to __init__.py exports when stable
 - Update README.md with new features
-- Update claude.md with implementation patterns
+- Update CLAUDE.md with implementation patterns
 - Add comprehensive examples to documentation
 
 ---

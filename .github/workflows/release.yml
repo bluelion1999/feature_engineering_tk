@@ -1,0 +1,130 @@
+name: Release
+
+# Fires when release-manager (or a human) pushes an annotated tag like v2.5.0.
+# Tagging is the single source of truth for "this is a release" - see CONTRIBUTING.md.
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify tag matches declared versions
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: extract
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Tag version: $TAG"
+
+      - name: Confirm all 5 file locations match the tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.extract.outputs.version }}"
+
+          PYPROJECT=$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          SETUPPY=$(grep -m1 "version='" setup.py | sed -E "s/.*version='([^']*)'.*/\1/")
+          INIT=$(grep -m1 '__version__' feature_engineering_tk/__init__.py | sed -E "s/.*'([^']*)'.*/\1/")
+          README=$(grep -m1 '^# Feature Engineering Toolkit v' README.md | sed -E 's/.*v([0-9][^ ]*)/\1/')
+          CHANGELOG=$(grep -m1 '^## \[' CHANGELOG.md | sed -E 's/^## \[([^]]*)\].*/\1/')
+
+          for v in "$PYPROJECT" "$SETUPPY" "$INIT" "$README" "$CHANGELOG"; do
+            if [ "$v" != "$TAG" ]; then
+              echo "::error::Tag is v$TAG but found version $v. Run the release-manager checklist before tagging."
+              exit 1
+            fi
+          done
+          echo "Tag v$TAG matches pyproject.toml, setup.py, __init__.py, README.md, and CHANGELOG.md"
+
+  test:
+    name: Full test suite
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+      - run: pytest tests/ -v
+
+  build:
+    name: Build distribution
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --upgrade pip build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  github-release:
+    name: Publish GitHub Release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Extract this version's CHANGELOG section
+        shell: bash
+        run: |
+          awk '/^## \[/{if (p) exit; p=1; next} p' CHANGELOG.md > release_notes.md
+          cat release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ needs.verify.outputs.version }}
+          body_path: release_notes.md
+          files: dist/*
+          draft: false
+          prerelease: ${{ contains(needs.verify.outputs.version, 'a') || contains(needs.verify.outputs.version, 'b') || contains(needs.verify.outputs.version, 'rc') }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [verify, github-release]
+    runs-on: ubuntu-latest
+    # Gated behind a GitHub Environment. Until the "pypi" environment exists with
+    # required reviewers and a configured Trusted Publisher (PyPI > your project >
+    # Publishing > Add a new publisher), this job will fail closed rather than
+    # publish silently - matching the existing rule that a human handles PyPI
+    # releases (see .claude/agents/release-manager.md).
+    environment: pypi
+    permissions:
+      id-token: write # required for PyPI trusted publishing (OIDC), no API token stored
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

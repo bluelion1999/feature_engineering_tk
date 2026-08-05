@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [2.4.3] - 2026-01-20
+
+### Fixed
+
+- **Pandas 2.x compatibility** in `DataAnalyzer.get_basic_info()` - resolved `ValueError` when constructing a DataFrame from columns of different lengths by wrapping all values in single-element lists
+
+### Tests
+
+- Updated `get_basic_info` test to access values via `[0]` index to match the new construction. All 218 tests passing.
+
+## [2.4.2] - 2026-01-20
+
+### Added
+
+- Quickstart and in-depth tutorial notebooks under `examples/`
+
+### Fixed
+
+- **`select_features_auto()`** in `feature_selection.py` - previously did not return an accessible reference to the underlying `FeatureSelector`; now returns the object so callers can inspect `selected_features` / `feature_scores` after the pipeline runs
+- Bug fixes in the tutorial notebooks so they run end-to-end against the current API
+
+## [2.4.1] - 2026-01-15
+
+### Fixed
+
+Critical bug fixes from TDD pass on the `fly_catcher` branch (7 total: 4 critical + 3 medium severity):
+
+- **DataFrame reference bug** in `create_missing_indicators()` - fixed to use `df_result` instead of `self.df` when `inplace=False` (#1)
+- **Division by zero** in class imbalance calculation - added protection for single-class targets (#2)
+- **Unsafe `.iloc[0]` access** in `get_categorical_summary` - added validation for empty `value_counts` (#3)
+- **NaN correlation handling** - added NaN checks in feature engineering suggestions to skip constant features (#4)
+- **Incomplete outlier capping** - implemented zscore capping (previously only supported IQR method) (#5)
+- **Mode calculation edge case** - added warning when multiple modes are detected during imputation (#6)
+- **Missing groupby validation** - added upfront validation for single-class targets to improve efficiency (#7)
+
+### Tests
+
+- Added 7 comprehensive tests (218 total: 211 baseline + 7 new)
+- Test-first approach: write failing test → fix bug → verify test passes
+- 100% backward compatible, no regressions
+
+> **Note (2026-08):** this entry corrects a mislabeling in earlier drafts of
+> `README.md`/`CLAUDE.md`, which had attributed the 7 `fly_catcher` bug
+> fixes to v2.4.2 and had no entry at all for the actual v2.4.2 (tutorials +
+> `select_features_auto` fix). Reconstructed from `git log v2.4.0..v2.4.1`
+> and `git log v2.4.1..v2.4.2`; see those commit ranges for the exact diffs.
+
 ## [2.4.0] - 2026-01-02
 
 ### Added
@@ -448,7 +497,7 @@ All 131 tests pass successfully. Changes maintain backward compatibility.
 
 - **Enhanced Documentation**
   - Comprehensive docstrings with Args/Returns/Raises sections
-  - Developer documentation in `claude.md`
+  - Developer documentation in `CLAUDE.md`
   - Migration guide in README.md
 
 ### Changed

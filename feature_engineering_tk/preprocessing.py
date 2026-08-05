@@ -147,7 +147,7 @@ class DataPreprocessor(FeatureEngineeringBase):
 
         if not columns:
             logger.warning("No valid columns to process")
-            return df_result
+            return df_result if not inplace else self
 
         if strategy == 'drop':
             rows_before = len(df_result)
@@ -427,6 +427,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not isinstance(dtype_map, dict):
             raise TypeError("dtype_map must be a dictionary")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         # Validate columns exist
@@ -447,6 +450,15 @@ class DataPreprocessor(FeatureEngineeringBase):
 
         # Fixed: Update self.df when inplace=True
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='convert_dtypes',
+                parameters={'dtype_map': dtype_map},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -466,6 +478,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         Returns:
             DataFrame with clipped values
         """
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         # Validate column exists and is numeric
@@ -482,6 +497,15 @@ class DataPreprocessor(FeatureEngineeringBase):
 
         # Fixed: Update self.df when inplace=True
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='clip_values',
+                parameters={'column': column, 'lower': lower, 'upper': upper},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -496,6 +520,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         Returns:
             DataFrame without constant columns
         """
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         constant_cols = [col for col in df_result.columns if df_result[col].nunique() <= 1]
@@ -505,6 +532,16 @@ class DataPreprocessor(FeatureEngineeringBase):
             df_result = df_result.drop(columns=constant_cols)
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='remove_constant_columns',
+                parameters={},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after,
+                additional_info={'columns_dropped': constant_cols}
+            )
             self.df = df_result
             return self
         return df_result
@@ -527,6 +564,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not 0 < threshold <= 1:
             raise ValueError("threshold must be in range (0, 1]")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         high_card_cols = []
@@ -541,6 +581,16 @@ class DataPreprocessor(FeatureEngineeringBase):
             df_result = df_result.drop(columns=high_card_cols)
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='remove_high_cardinality_columns',
+                parameters={'threshold': threshold},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after,
+                additional_info={'columns_dropped': high_card_cols}
+            )
             self.df = df_result
             return self
         return df_result
@@ -645,11 +695,23 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not isinstance(rename_map, dict):
             raise TypeError("rename_map must be a dictionary")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         df_result = df_result.rename(columns=rename_map)
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='rename_columns',
+                parameters={'rename_map': rename_map},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -668,6 +730,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not isinstance(column_order, list):
             raise TypeError("column_order must be a list")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         # Validate columns exist
@@ -679,6 +744,15 @@ class DataPreprocessor(FeatureEngineeringBase):
         df_result = df_result[final_order]
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='reorder_columns',
+                parameters={'column_order': column_order},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -704,6 +778,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not callable(func):
             raise TypeError("func must be callable")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         # Validate column exists
@@ -720,6 +797,16 @@ class DataPreprocessor(FeatureEngineeringBase):
 
         # Fixed: Update self.df when inplace=True
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='apply_custom_function',
+                parameters={'column': column, 'func': getattr(func, '__name__', repr(func)),
+                           'new_column': new_column},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -734,11 +821,23 @@ class DataPreprocessor(FeatureEngineeringBase):
         Returns:
             DataFrame with reset index
         """
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         df_result = df_result.reset_index(drop=True)
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='reset_index_clean',
+                parameters={},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -768,6 +867,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         if frac is not None and not 0 < frac <= 1:
             raise ValueError("frac must be in range (0, 1]")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         # Validate n <= len(df)
@@ -779,7 +881,17 @@ class DataPreprocessor(FeatureEngineeringBase):
         logger.info(f"Sampled {len(df_result)} rows from DataFrame")
 
         if inplace:
-            self.df = df_result.reset_index(drop=True)
+            df_result = df_result.reset_index(drop=True)
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='sample_data',
+                parameters={'n': n, 'frac': frac, 'random_state': random_state},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
+            self.df = df_result
             return self
         return df_result.reset_index(drop=True)
 
@@ -891,6 +1003,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not isinstance(columns, list):
             raise TypeError("columns must be a list")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         # Validate columns are string type
@@ -910,6 +1025,15 @@ class DataPreprocessor(FeatureEngineeringBase):
                 logger.info(f"Standardized '{col}': {before_unique} -> {after_unique} unique values")
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='handle_whitespace_variants',
+                parameters={'columns': columns},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -935,6 +1059,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not isinstance(columns, list):
             raise TypeError("columns must be a list")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         # Validate columns are string type
@@ -950,6 +1077,15 @@ class DataPreprocessor(FeatureEngineeringBase):
             logger.info(f"Created length feature '{new_col}'")
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='extract_string_length',
+                parameters={'columns': columns, 'suffix': suffix},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result
@@ -1094,6 +1230,9 @@ class DataPreprocessor(FeatureEngineeringBase):
         if not isinstance(columns, list):
             raise TypeError("columns must be a list")
 
+        # Capture shape before operation
+        rows_before, cols_before = self.df.shape
+
         df_result = self.df if inplace else self.df.copy()
 
         # Validate columns exist
@@ -1114,6 +1253,15 @@ class DataPreprocessor(FeatureEngineeringBase):
                 logger.info(f"Created indicator '{new_col}' (no missing values)")
 
         if inplace:
+            rows_after, cols_after = df_result.shape
+            self._log_operation(
+                method_name='create_missing_indicators',
+                parameters={'columns': columns, 'suffix': suffix},
+                rows_before=rows_before,
+                cols_before=cols_before,
+                rows_after=rows_after,
+                cols_after=cols_after
+            )
             self.df = df_result
             return self
         return df_result

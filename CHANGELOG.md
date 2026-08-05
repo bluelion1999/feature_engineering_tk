@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Pandas 3.0 compatibility** - `clean_string_columns()`, `handle_whitespace_variants()`, `extract_string_length()`, and `get_categorical_summary()` silently no-op'd on string columns under pandas >= 3.0, which defaults string columns built from Python literals to a native `StringDtype` instead of `object`. Added a version-proof string-dtype check (`utils._is_string_like_dtype()`) used everywhere the toolkit was doing `dtype == 'object'`-based detection.
 - **`handle_outliers()` cap action on integer columns** - assigning float cap bounds into an `int64` column via `.loc` now raises under pandas >= 3.0 instead of silently upcasting; integer columns are upcast to float before the cap assignment.
+- **Dead `has_outliers` branch in `TargetAnalyzer.recommend_models()`** - `analyze_target_distribution()` never populated a `has_outliers` key, so the regression-only recommendation of Huber Regressor for outlier-heavy targets could never fire. `analyze_target_distribution()` now runs `DataAnalyzer.detect_outliers_iqr()` on the target column (reusing the toolkit's existing IQR-based outlier detection rather than adding a new method) and populates `has_outliers` / `outlier_count` in the returned dict, so the Huber Regressor recommendation now actually triggers for regression targets with extreme outliers.
 
 ## [2.4.3] - 2026-01-20
 

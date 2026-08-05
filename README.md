@@ -869,7 +869,9 @@ print(importance_df)
 selected_df = selector.apply_selection(keep_target=True)
 
 # Automatic feature selection pipeline
-auto_selected_df = select_features_auto(
+# Returns a (DataFrame, FeatureSelector) tuple - the selector lets you
+# inspect selected_features / feature_scores after the pipeline runs
+auto_selected_df, auto_selector = select_features_auto(
     df,
     target_column='target',
     task='classification',
@@ -877,6 +879,7 @@ auto_selected_df = select_features_auto(
     variance_threshold=0.01,
     correlation_threshold=0.9
 )
+print(auto_selector.selected_features)
 ```
 
 ### 6. Complete Pipeline Example

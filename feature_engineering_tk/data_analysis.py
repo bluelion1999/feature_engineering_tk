@@ -10,6 +10,7 @@ from scipy.stats import chi2_contingency, f_oneway, pearsonr, spearmanr
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
 from sklearn.metrics import r2_score
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+from statsmodels.tools.tools import add_constant
 
 from .base import FeatureEngineeringBase
 from .utils import (
@@ -67,10 +68,10 @@ class DataAnalyzer(FeatureEngineeringBase):
 
     def get_categorical_summary(self, max_unique: int = 50) -> pd.DataFrame:
         """Get summary for categorical columns."""
-        # get_string_columns() matches object dtype and pandas' native
-        # StringDtype (default for string columns in pandas >= 3.0);
-        # select_dtypes(include=['category']) covers explicit Categoricals.
-        cat_cols = get_string_columns(self.df) + self.df.select_dtypes(include=['category']).columns.tolist()
+        # get_string_columns() matches object dtype, pandas' native
+        # StringDtype (default for string columns in pandas >= 3.0),
+        # pyarrow-backed ArrowDtype string columns, and Categorical dtype.
+        cat_cols = get_string_columns(self.df)
 
         if len(cat_cols) == 0:
             return pd.DataFrame()
@@ -232,9 +233,17 @@ class DataAnalyzer(FeatureEngineeringBase):
             return pd.DataFrame()
 
         try:
+            # variance_inflation_factor assumes the design matrix includes an
+            # intercept/constant column - VIF is defined relative to a regression
+            # that includes one. Without it, values are computed as if the
+            # regression passes through the origin, which is badly wrong for any
+            # data that isn't already mean-zero. Add the constant, then skip its
+            # own VIF (index 0) since it isn't a meaningful per-feature value.
+            df_vif_const = add_constant(df_vif, has_constant='add')
+
             vif_data = []
             for i, col in enumerate(df_vif.columns):
-                vif = variance_inflation_factor(df_vif.values, i)
+                vif = variance_inflation_factor(df_vif_const.values, i + 1)
                 vif_data.append({'feature': col, 'VIF': vif})
 
             vif_df = pd.DataFrame(vif_data)
@@ -299,8 +308,9 @@ class DataAnalyzer(FeatureEngineeringBase):
                 is_candidate = True
                 suggestion = f"Very low unique ratio ({unique_ratio:.1%}) - possibly categorical with {unique_count} categories"
 
-            # Integer-only columns with low cardinality
-            elif col_data.dtype in ['int64', 'int32', 'int16', 'int8'] and unique_count <= 20:
+            # Integer-only columns with low cardinality (includes pandas
+            # nullable integer dtypes like Int64, Int32, etc.)
+            elif pd.api.types.is_integer_dtype(col_data) and unique_count <= 20:
                 # Check if all values are integers (some int columns can have floats after operations)
                 if (col_data == col_data.astype(int)).all():
                     is_candidate = True

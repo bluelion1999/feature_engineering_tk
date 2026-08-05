@@ -5,6 +5,8 @@ Tests assumption validation, effect size calculations, multiple testing correcti
 and confidence interval utilities.
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -60,6 +62,110 @@ class TestNormalityChecks:
         # Should use subsample of 5000
         assert result['sample_size'] == 5000
         assert result['is_normal'] == True
+
+    def test_check_normality_normaltest_method(self):
+        """Test normality check with D'Agostino-Pearson (normaltest)."""
+        np.random.seed(42)
+        data = np.random.normal(0, 1, 1000)
+
+        result = statistical_utils.check_normality(data, method='normaltest')
+
+        assert result['test_name'] == "D'Agostino-Pearson"
+        assert result['is_normal'] == True
+        assert result['pvalue'] > 0.05
+        assert 'parametric' in result['recommendation'].lower()
+
+    def test_check_normality_anderson_normal_data(self):
+        """Test Anderson-Darling normality check with normally distributed data."""
+        np.random.seed(42)
+        data = np.random.normal(0, 1, 500)
+
+        result = statistical_utils.check_normality(data, method='anderson', alpha=0.05)
+
+        assert result['test_name'] == 'Anderson-Darling'
+        assert result['is_normal'] == True
+        assert result['sample_size'] == 500
+        # Modern scipy (>=1.17) reports a pvalue via the non-deprecated
+        # method='interpolate' path; older scipy falls back to a
+        # critical_value instead. Exactly one should be populated.
+        assert (result['pvalue'] is None) != (result['critical_value'] is None)
+
+    def test_check_normality_anderson_non_normal_data(self):
+        """Test Anderson-Darling normality check with clearly non-normal data."""
+        np.random.seed(42)
+        data = np.random.exponential(1, 500)
+
+        result = statistical_utils.check_normality(data, method='anderson', alpha=0.05)
+
+        assert result['test_name'] == 'Anderson-Darling'
+        assert result['is_normal'] == False
+        assert 'non-parametric' in result['recommendation'].lower()
+
+    def test_check_normality_anderson_alpha_changes_result(self):
+        """Different alpha values must actually change Anderson-Darling behavior.
+
+        Regression test for the bug where the anderson branch hardcoded the
+        5% critical value/significance level regardless of the requested
+        alpha, so alpha=0.01, 0.05, and 0.10 all produced identical output.
+        Uses a fixed seed/sample size that reliably lands the Anderson
+        p-value (or, on legacy scipy, statistic) between the 5% and 15%
+        thresholds, so a strict alpha=0.05 and a loose alpha=0.15 must
+        disagree on is_normal for the exact same data.
+        """
+        np.random.seed(1)
+        data = np.random.normal(0, 1, 50)
+
+        strict = statistical_utils.check_normality(data, method='anderson', alpha=0.05)
+        loose = statistical_utils.check_normality(data, method='anderson', alpha=0.15)
+
+        # The statistic is a property of the data, not alpha, so it must
+        # be identical across calls.
+        assert strict['statistic'] == loose['statistic']
+
+        if strict['pvalue'] is not None:
+            # New scipy (method='interpolate') path: same interpolated
+            # pvalue each call, but the is_normal comparison against alpha
+            # must still differ.
+            assert strict['pvalue'] == loose['pvalue']
+        else:
+            # Legacy scipy (critical_values table) path: alpha maps to a
+            # different critical_value entry in the table.
+            assert strict['critical_value'] != loose['critical_value']
+
+        assert strict['is_normal'] != loose['is_normal']
+
+    def test_check_normality_anderson_out_of_range_alpha_logs_warning(self, caplog):
+        """Alpha outside scipy's supported Anderson-Darling range should warn, not silently misbehave."""
+        np.random.seed(42)
+        data = np.random.normal(0, 1, 500)
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger='feature_engineering_tk.statistical_utils'):
+            result = statistical_utils.check_normality(data, method='anderson', alpha=0.30)
+
+        assert result['test_name'] == 'Anderson-Darling'
+        assert any('alpha' in record.message.lower() for record in caplog.records)
+
+    def test_check_normality_anderson_no_deprecation_crash(self):
+        """check_normality(method='anderson') must not rely on scipy attributes
+        scheduled for removal in scipy >= 1.19 (critical_values/significance_level
+        accessed via the unspecified-`method` call form, which emits a
+        FutureWarning on scipy >= 1.17 and will hard-crash once those
+        attributes are removed). Scoped narrowly to this one call so it
+        doesn't turn unrelated warnings into failures elsewhere.
+        """
+        np.random.seed(42)
+        data = np.random.normal(0, 1, 500)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', category=FutureWarning)
+            warnings.simplefilter('error', category=DeprecationWarning)
+            # Should not raise - the anderson branch must use a
+            # non-deprecated scipy code path.
+            result = statistical_utils.check_normality(data, method='anderson', alpha=0.05)
+
+        assert result['test_name'] == 'Anderson-Darling'
+        assert result['statistic'] is not None
 
 
 class TestHomogeneityOfVariance:

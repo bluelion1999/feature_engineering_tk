@@ -37,7 +37,9 @@ jobs:
           SETUPPY=$(grep -m1 "version='" setup.py | sed -E "s/.*version='([^']*)'.*/\1/")
           INIT=$(grep -m1 '__version__' feature_engineering_tk/__init__.py | sed -E "s/.*'([^']*)'.*/\1/")
           README=$(grep -m1 '^# Feature Engineering Toolkit v' README.md | sed -E 's/.*v([0-9][^ ]*)/\1/')
-          CHANGELOG=$(grep -m1 '^## \[' CHANGELOG.md | sed -E 's/^## \[([^]]*)\].*/\1/')
+          # Skip the [Unreleased] section (see CONTRIBUTING.md 5.3) and take
+          # the first dated release heading.
+          CHANGELOG=$(grep -m1 '^## \[[0-9]' CHANGELOG.md | sed -E 's/^## \[([^]]*)\].*/\1/')
 
           for v in "$PYPROJECT" "$SETUPPY" "$INIT" "$README" "$CHANGELOG"; do
             if [ "$v" != "$TAG" ]; then

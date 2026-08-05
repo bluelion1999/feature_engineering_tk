@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Pandas 3.0 compatibility** - `clean_string_columns()`, `handle_whitespace_variants()`, `extract_string_length()`, and `get_categorical_summary()` silently no-op'd on string columns under pandas >= 3.0, which defaults string columns built from Python literals to a native `StringDtype` instead of `object`. Added a version-proof string-dtype check (`utils._is_string_like_dtype()`) used everywhere the toolkit was doing `dtype == 'object'`-based detection.
 - **`handle_outliers()` cap action on integer columns** - assigning float cap bounds into an `int64` column via `.loc` now raises under pandas >= 3.0 instead of silently upcasting; integer columns are upcast to float before the cap assignment.
+- **`feature_selection.py` bugs found during a dedicated audit of this previously-untested module** (`FeatureSelector`, `select_features_auto()`):
+  - `select_features_auto()`'s type hint claimed `-> pd.DataFrame` while the body actually returned a `(pd.DataFrame, FeatureSelector)` tuple (a v2.4.2 changelog entry described the tuple-returning fix but never updated the type hint/docstring). The type hint is now `Tuple[pd.DataFrame, FeatureSelector]` and the docstring documents both elements. Callers in `README.md`, `examples/quickstart.ipynb`, and `examples/tutorial_indepth.ipynb` that assigned the tuple to a single variable and then used it as a DataFrame (`.shape`, `.columns`, `.to_csv()`, passing it to `TargetAnalyzer`) were actually broken at runtime; these call sites now unpack the tuple correctly.
+  - `select_by_missing_values()` mutated the caller's `exclude_columns` list via `.append()` instead of `+ [...]`, so reusing the same list object across calls silently grew it.
+  - `select_by_target_correlation()` crashed with a raw, uninformative pandas `ValueError` when `target_column` held string/categorical labels; it now raises `DataTypeError` with a clear message before attempting the correlation.
+  - `select_by_statistical_test()` silently fell back to `f_classif` for any unrecognized `score_func` string (e.g. a typo like `'f_clasif'`) instead of raising; it now raises `InvalidMethodError` listing the valid options.
+
+### Tests
+
+- Added `tests/test_feature_selection.py` (52 tests) covering every public method of `FeatureSelector` and `select_features_auto()` - happy paths, edge cases (empty DataFrame, all-constant columns, target column excluded from candidates, no columns surviving a filter), and regression tests for each of the four bugs fixed above.
 
 ## [2.4.3] - 2026-01-20
 

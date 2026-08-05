@@ -366,6 +366,12 @@ class DataPreprocessor(FeatureEngineeringBase):
                                  f"Consider using action='cap' or 'replace' instead.")
 
             elif action == 'cap':
+                # Cap bounds are always float; upcast integer columns first so
+                # the assignment below doesn't raise (pandas >= 3.0 no longer
+                # silently upcasts int64 columns on a float .loc assignment).
+                if pd.api.types.is_integer_dtype(df_result[col]):
+                    df_result[col] = df_result[col].astype(float)
+
                 if method == 'iqr':
                     df_result.loc[df_result[col] < lower_bound, col] = lower_bound
                     df_result.loc[df_result[col] > upper_bound, col] = upper_bound

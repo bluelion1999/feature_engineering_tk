@@ -68,10 +68,10 @@ class DataAnalyzer(FeatureEngineeringBase):
 
     def get_categorical_summary(self, max_unique: int = 50) -> pd.DataFrame:
         """Get summary for categorical columns."""
-        # get_string_columns() matches object dtype and pandas' native
-        # StringDtype (default for string columns in pandas >= 3.0);
-        # select_dtypes(include=['category']) covers explicit Categoricals.
-        cat_cols = get_string_columns(self.df) + self.df.select_dtypes(include=['category']).columns.tolist()
+        # get_string_columns() matches object dtype, pandas' native
+        # StringDtype (default for string columns in pandas >= 3.0),
+        # pyarrow-backed ArrowDtype string columns, and Categorical dtype.
+        cat_cols = get_string_columns(self.df)
 
         if len(cat_cols) == 0:
             return pd.DataFrame()
@@ -308,8 +308,9 @@ class DataAnalyzer(FeatureEngineeringBase):
                 is_candidate = True
                 suggestion = f"Very low unique ratio ({unique_ratio:.1%}) - possibly categorical with {unique_count} categories"
 
-            # Integer-only columns with low cardinality
-            elif col_data.dtype in ['int64', 'int32', 'int16', 'int8'] and unique_count <= 20:
+            # Integer-only columns with low cardinality (includes pandas
+            # nullable integer dtypes like Int64, Int32, etc.)
+            elif pd.api.types.is_integer_dtype(col_data) and unique_count <= 20:
                 # Check if all values are integers (some int columns can have floats after operations)
                 if (col_data == col_data.astype(int)).all():
                     is_candidate = True

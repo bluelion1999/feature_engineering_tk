@@ -158,6 +158,67 @@ class TestDataPreprocessor:
         assert result['values'].max() < 100, "Outlier should be capped"
         assert result['values'].max() > 5, "Cap should be above normal values"
 
+    def test_handle_outliers_replace_action_int_column_median(self):
+        """Regression test: replace action on int64 column with fractional median.
+
+        Under pandas >= 3.0, assigning a fractional float (e.g. a median) into
+        an int64 column via .loc raises TypeError instead of silently
+        upcasting. The sibling 'cap' action already upcasts int columns to
+        float before assignment; 'replace' was missing the same fix.
+        """
+        df = pd.DataFrame({'values': [1, 2, 3, 4, 5, 100]})  # int64, median = 3.5
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.handle_outliers(
+            columns=['values'],
+            method='iqr',
+            action='replace',
+            replace_with='median',
+            inplace=False
+        )
+
+        assert len(result) == 6, "Should keep all rows when replacing"
+        assert pd.api.types.is_float_dtype(result['values']), "Column should be upcast to float"
+        assert result.loc[result['values'] == 3.5].shape[0] == 1, "Outlier should be replaced with median"
+
+    def test_handle_outliers_replace_action_int_column_mean(self):
+        """Regression test: replace action on int64 column with fractional mean."""
+        df = pd.DataFrame({'values': [1, 2, 3, 4, 5, 100]})  # int64, mean is fractional
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.handle_outliers(
+            columns=['values'],
+            method='iqr',
+            action='replace',
+            replace_with='mean',
+            inplace=False
+        )
+
+        assert len(result) == 6
+        assert pd.api.types.is_float_dtype(result['values']), "Column should be upcast to float"
+        assert 100 not in result['values'].values, "Outlier should have been replaced"
+
+    def test_handle_outliers_replace_action_int_column_nan(self):
+        """Regression test: replace action with 'nan' on int64 column.
+
+        int64 columns cannot hold NaN at all, so this also requires the
+        upcast-to-float fix (not just fractional-value handling).
+        """
+        df = pd.DataFrame({'values': [1, 2, 3, 4, 5, 100]})  # int64
+        preprocessor = DataPreprocessor(df)
+
+        result = preprocessor.handle_outliers(
+            columns=['values'],
+            method='iqr',
+            action='replace',
+            replace_with='nan',
+            inplace=False
+        )
+
+        assert len(result) == 6
+        assert pd.api.types.is_float_dtype(result['values']), "Column should be upcast to float"
+        assert result['values'].isna().sum() == 1, "Outlier should be replaced with NaN"
+
     def test_input_validation(self, sample_df):
         """Test input validation for various methods."""
         preprocessor = DataPreprocessor(sample_df)

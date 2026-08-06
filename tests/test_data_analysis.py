@@ -359,6 +359,60 @@ class TestDataAnalyzer:
         assert all_nan_info['top_value_freq'] == 0
         assert all_nan_info['top_value_percent'] == 0
 
+    def test_get_cardinality_info(self, sample_df):
+        """Test get_cardinality_info with a normal, non-empty DataFrame (regression coverage)."""
+        analyzer = DataAnalyzer(sample_df)
+        cardinality = analyzer.get_cardinality_info()
+
+        assert list(cardinality.columns) == ['column', 'unique_count', 'cardinality_ratio', 'dtype']
+        assert len(cardinality) == len(sample_df.columns)
+
+        # 'constant' column has 1 unique value out of 5 rows -> ratio 0.2
+        constant_row = cardinality[cardinality['column'] == 'constant'].iloc[0]
+        assert constant_row['unique_count'] == 1
+        assert constant_row['cardinality_ratio'] == pytest.approx(0.2)
+
+        # 'numeric1' is fully unique (5 unique values out of 5 rows) -> ratio 1.0
+        numeric1_row = cardinality[cardinality['column'] == 'numeric1'].iloc[0]
+        assert numeric1_row['unique_count'] == 5
+        assert numeric1_row['cardinality_ratio'] == pytest.approx(1.0)
+
+        # Sorted by unique_count descending
+        assert cardinality['unique_count'].is_monotonic_decreasing
+
+    def test_get_cardinality_info_empty_dataframe(self):
+        """Test get_cardinality_info with 0 rows (CRITICAL FIX).
+
+        Previously, unique_count / len(self.df) raised ZeroDivisionError
+        when the DataFrame had columns but 0 rows. It should now return
+        a correctly-shaped DataFrame with NaN cardinality_ratio instead
+        of crashing.
+        """
+        df = pd.DataFrame({'a': pd.Series([], dtype='float64'),
+                            'b': pd.Series([], dtype='object')})
+        analyzer = DataAnalyzer(df)
+
+        # Should not raise ZeroDivisionError
+        result = analyzer.get_cardinality_info()
+
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ['column', 'unique_count', 'cardinality_ratio', 'dtype']
+        assert len(result) == 2
+        assert set(result['column']) == {'a', 'b'}
+        assert (result['unique_count'] == 0).all()
+        assert result['cardinality_ratio'].isna().all()
+
+    def test_get_cardinality_info_empty_dataframe_no_columns(self):
+        """Test get_cardinality_info with 0 rows AND 0 columns."""
+        df = pd.DataFrame()
+        analyzer = DataAnalyzer(df)
+
+        result = analyzer.get_cardinality_info()
+
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ['column', 'unique_count', 'cardinality_ratio', 'dtype']
+        assert len(result) == 0
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

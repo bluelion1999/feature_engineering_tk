@@ -13,6 +13,7 @@ from scipy import stats
 
 from ..base import FeatureEngineeringBase
 from ..data_analysis import DataAnalyzer
+from ..exceptions import ColumnNotFoundError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -41,12 +42,13 @@ class TargetAnalyzerCore(FeatureEngineeringBase):
 
         Raises:
             TypeError: If df is not a pandas DataFrame
-            ValueError: If target_column not in dataframe or invalid task specified
+            ColumnNotFoundError: If target_column not in dataframe
+            ValueError: If an invalid task is specified
         """
         super().__init__(df)
 
         if target_column not in self.df.columns:
-            raise ValueError(f"Target column '{target_column}' not found in dataframe")
+            raise ColumnNotFoundError(target_column, available_columns=list(self.df.columns))
         if task not in ['auto', 'classification', 'regression']:
             raise ValueError("task must be 'auto', 'classification', or 'regression'")
 

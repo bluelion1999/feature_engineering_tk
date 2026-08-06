@@ -335,6 +335,31 @@ class TestMultipleTestingCorrection:
         # Bonferroni is most conservative
         assert result['num_significant_corrected'] <= result['num_significant_raw']
 
+    def test_empty_pvalues_raises_insufficient_data_error(self):
+        """An empty pvalues list used to crash with a low-level, confusing
+        ZeroDivisionError from inside statsmodels' multipletests(); it should
+        now raise a clear, catchable InsufficientDataError instead."""
+        from feature_engineering_tk.exceptions import InsufficientDataError
+
+        with pytest.raises(InsufficientDataError) as exc_info:
+            statistical_utils.apply_multiple_testing_correction([])
+
+        assert exc_info.value.required == 1
+        assert exc_info.value.actual == 0
+
+    def test_empty_pvalues_array_raises_insufficient_data_error(self):
+        """Same guard, but via an empty numpy array input instead of a list."""
+        from feature_engineering_tk.exceptions import InsufficientDataError
+
+        with pytest.raises(InsufficientDataError):
+            statistical_utils.apply_multiple_testing_correction(np.array([]))
+
+    def test_single_pvalue_still_works(self):
+        """Regression guard: the new empty-input check must not affect
+        the (already-supported) single-p-value case."""
+        result = statistical_utils.apply_multiple_testing_correction([0.03], method='fdr_bh')
+        assert len(result['corrected_pvalues']) == 1
+
 
 class TestConfidenceIntervals:
     """Test confidence interval calculations."""

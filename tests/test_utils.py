@@ -25,6 +25,7 @@ from feature_engineering_tk.utils import (
     get_string_columns,
     get_feature_columns,
 )
+from feature_engineering_tk.exceptions import ColumnNotFoundError
 
 
 class TestIsStringLikeDtype:
@@ -137,9 +138,27 @@ class TestValidateColumns:
         assert any('missing' in msg for msg in caplog.messages)
 
     def test_missing_columns_raises_when_requested(self, sample_df):
-        """raise_on_missing=True should raise ValueError for missing columns."""
-        with pytest.raises(ValueError):
+        """raise_on_missing=True should raise ColumnNotFoundError (not a plain
+        ValueError - ColumnNotFoundError subclasses ValidationError ->
+        MLToolkitError -> Exception, so code that used to catch ValueError
+        here must now catch ColumnNotFoundError instead)."""
+        with pytest.raises(ColumnNotFoundError):
             validate_columns(sample_df, ['missing'], raise_on_missing=True)
+
+    def test_missing_columns_raises_with_column_and_available_columns(self, sample_df):
+        """The raised ColumnNotFoundError should carry the missing column name
+        and the DataFrame's available columns for a richer, catchable error."""
+        with pytest.raises(ColumnNotFoundError) as exc_info:
+            validate_columns(sample_df, ['missing'], raise_on_missing=True)
+        assert exc_info.value.column_name == 'missing'
+        assert exc_info.value.available_columns == ['a', 'b', 'c']
+
+    def test_missing_columns_raises_reports_first_missing_of_several(self, sample_df):
+        """With multiple missing columns, the exception should report the
+        first one encountered (deterministic, matches input order)."""
+        with pytest.raises(ColumnNotFoundError) as exc_info:
+            validate_columns(sample_df, ['missing1', 'missing2'], raise_on_missing=True)
+        assert exc_info.value.column_name == 'missing1'
 
     def test_empty_column_list_returns_empty_list(self, sample_df, caplog):
         """An empty input list should return an empty list without error."""

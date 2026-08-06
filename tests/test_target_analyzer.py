@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for testing
 from feature_engineering_tk import TargetAnalyzer
+from feature_engineering_tk.exceptions import ColumnNotFoundError
 
 
 @pytest.fixture
@@ -72,9 +73,20 @@ class TestTargetAnalyzerInitialization:
             TargetAnalyzer([1, 2, 3], target_column='target')
 
     def test_init_with_missing_target_column(self, classification_df):
-        """Test initialization with missing target column"""
-        with pytest.raises(ValueError, match="not found"):
+        """Test initialization with missing target column.
+
+        Regression test: this used to raise a plain ValueError; it now
+        raises ColumnNotFoundError (NOT a ValueError subclass), a breaking
+        change for anyone catching ValueError specifically here.
+        """
+        with pytest.raises(ColumnNotFoundError, match="not found"):
             TargetAnalyzer(classification_df, target_column='nonexistent')
+
+        try:
+            TargetAnalyzer(classification_df, target_column='nonexistent')
+        except ColumnNotFoundError as exc:
+            assert exc.column_name == 'nonexistent'
+            assert 'target' in exc.available_columns
 
     def test_init_with_invalid_task(self, classification_df):
         """Test initialization with invalid task type"""

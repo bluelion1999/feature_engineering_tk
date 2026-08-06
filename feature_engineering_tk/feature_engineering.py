@@ -19,6 +19,8 @@ from .exceptions import (
     ValidationError,
     InvalidMethodError,
     TransformerNotFittedError,
+    EmptyDataFrameError,
+    ConstantColumnError,
 )
 
 # Configure logging
@@ -207,6 +209,10 @@ class FeatureEngineer(FeatureEngineeringBase):
 
         Raises:
             ValueError: If invalid method specified
+            EmptyDataFrameError: If the DataFrame has no rows (a fitted scaler
+                is meaningless/undefined with zero samples; without this check
+                sklearn raises a low-level, confusing "Found array with 0
+                sample(s)" ValueError instead)
 
         Examples:
             >>> engineer = FeatureEngineer(df)
@@ -221,6 +227,11 @@ class FeatureEngineer(FeatureEngineeringBase):
         """
         if not isinstance(columns, list):
             raise TypeError("columns must be a list")
+
+        if self.df.empty:
+            raise EmptyDataFrameError(
+                "Cannot fit a scaler on an empty DataFrame (0 rows)"
+            )
 
         scalers_map = {
             'standard': StandardScaler(),
@@ -327,6 +338,13 @@ class FeatureEngineer(FeatureEngineeringBase):
 
         Raises:
             ValueError: If invalid strategy or parameters
+            ConstantColumnError: If strategy='quantile' and the column has
+                zero variance (a single distinct value). Quantile binning is
+                undefined on a constant column - pandas.qcut() silently
+                collapses every bin edge to the same value and, with
+                duplicates='drop', returns an all-NaN column with no warning
+                at all. Use strategy='uniform' instead, which produces a
+                single degenerate-but-valid bin for constant data.
         """
         if strategy not in ['quantile', 'uniform']:
             raise ValueError("strategy must be 'quantile' or 'uniform'")
@@ -337,6 +355,9 @@ class FeatureEngineer(FeatureEngineeringBase):
         valid_cols = validate_numeric_columns(df_result, [column])
         if not valid_cols:
             return df_result if not inplace else self
+
+        if strategy == 'quantile' and isinstance(bins, int) and df_result[column].nunique(dropna=True) == 1:
+            raise ConstantColumnError(column, 'quantile binning')
 
         new_col_name = f"{column}_binned"
 

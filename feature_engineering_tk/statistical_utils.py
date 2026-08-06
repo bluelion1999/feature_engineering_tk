@@ -27,6 +27,8 @@ from statsmodels.stats.multitest import multipletests
 from typing import Dict, List, Union, Callable, Optional, Any
 import logging
 
+from .exceptions import InsufficientDataError
+
 logger = logging.getLogger(__name__)
 
 
@@ -703,6 +705,13 @@ def apply_multiple_testing_correction(pvalues: Union[List[float], np.ndarray],
         - num_significant_raw: Number significant before correction
         - num_significant_corrected: Number significant after correction
 
+    Raises:
+        InsufficientDataError: If pvalues is empty. statsmodels'
+            multipletests() has no defined behavior for zero p-values and
+            crashes with a low-level, confusing ZeroDivisionError rather
+            than a clean, catchable error.
+        ValueError: If any p-value is outside [0, 1]
+
     Example:
         >>> pvalues = [0.01, 0.04, 0.03, 0.50]
         >>> result = apply_multiple_testing_correction(pvalues)
@@ -710,6 +719,13 @@ def apply_multiple_testing_correction(pvalues: Union[List[float], np.ndarray],
         [True True True False]
     """
     pvalues_array = np.asarray(pvalues)
+
+    if pvalues_array.size == 0:
+        raise InsufficientDataError(
+            operation='multiple testing correction',
+            required=1,
+            actual=0
+        )
 
     # Validate p-values
     if np.any((pvalues_array < 0) | (pvalues_array > 1)):

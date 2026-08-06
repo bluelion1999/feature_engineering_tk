@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import logging
 import joblib
+from itertools import combinations
 from pathlib import Path
 from sklearn.preprocessing import (
     StandardScaler, MinMaxScaler, RobustScaler, LabelEncoder,
@@ -53,6 +54,12 @@ class FeatureEngineer(FeatureEngineeringBase):
         """
         Encode categorical columns using label encoding.
 
+        Missing values (NaN) are preserved rather than being encoded as a
+        literal 'nan' category: only non-null values are fit/transformed, and
+        NaN positions remain NaN in the result. Because NaN cannot be
+        represented in an integer dtype, the resulting column is upcast to
+        float64 (matching pandas' own behavior when a column contains NaN).
+
         Args:
             columns: List of columns to encode
             inplace: If True, modifies internal dataframe. Default False.
@@ -70,9 +77,31 @@ class FeatureEngineer(FeatureEngineeringBase):
 
         for col in valid_cols:
             encoder = LabelEncoder()
-            df_result[col] = encoder.fit_transform(df_result[col].astype(str))
+            non_null_mask = df_result[col].notna()
+            has_nan = not non_null_mask.all()
+            non_null_values = df_result.loc[non_null_mask, col].astype(str)
+
+            num_classes = 0
+            if len(non_null_values) > 0:
+                encoded_values = encoder.fit_transform(non_null_values)
+                num_classes = len(encoder.classes_)
+            else:
+                encoded_values = np.array([], dtype='int64')
+
+            if has_nan:
+                # NaN can't be represented in an integer dtype, so upcast to
+                # float64 (matching pandas' own behavior) and leave the
+                # originally-null positions as NaN rather than a fake category.
+                encoded = pd.Series(index=df_result.index, dtype='float64')
+                encoded.loc[non_null_mask] = encoded_values.astype('float64')
+                df_result[col] = encoded
+            else:
+                # No missing values: preserve the historical integer dtype.
+                encoded = pd.Series(encoded_values, index=df_result.index[non_null_mask])
+                df_result[col] = encoded
+
             self.encoders[f"{col}_label"] = encoder
-            logger.info(f"Label encoded column '{col}' with {len(encoder.classes_)} unique values")
+            logger.info(f"Label encoded column '{col}' with {num_classes} unique values")
 
         # Fixed: Update self.df when inplace=True
         if inplace:
@@ -260,7 +289,13 @@ class FeatureEngineer(FeatureEngineeringBase):
         Args:
             columns: List of columns to create polynomial features from
             degree: Polynomial degree (2 or 3)
-            interaction_only: If True, only create interaction terms (no powers)
+            interaction_only: If True, only create interaction terms (no powers).
+                For degree=2, this means pairwise products `{col1}_x_{col2}` for
+                every 2-column combination (no squared terms). For degree=3, this
+                means three-way products `{col1}_x_{col2}_x_{col3}` for every
+                3-column combination (no squared/cubed terms, and no pairwise
+                products) - requires at least 3 valid numeric columns; with
+                fewer, no features are created and a warning is logged.
             inplace: If True, modifies internal dataframe. Default False.
 
         Returns:
@@ -300,6 +335,19 @@ class FeatureEngineer(FeatureEngineeringBase):
                 df_result[f"{col}_squared"] = df_result[col] ** 2
                 df_result[f"{col}_cubed"] = df_result[col] ** 3
                 features_created += 2
+
+        elif degree == 3 and interaction_only:
+            if len(valid_cols) < 3:
+                logger.warning(
+                    "degree=3 with interaction_only=True requires at least 3 "
+                    f"valid numeric columns, got {len(valid_cols)}. No features created."
+                )
+            else:
+                for col1, col2, col3 in combinations(valid_cols, 3):
+                    df_result[f"{col1}_x_{col2}_x_{col3}"] = (
+                        df_result[col1] * df_result[col2] * df_result[col3]
+                    )
+                    features_created += 1
 
         logger.info(f"Created {features_created} polynomial features")
 
@@ -506,7 +554,7 @@ class FeatureEngineer(FeatureEngineeringBase):
 
     def create_aggregations(self, group_by: Union[str, List[str]],
                             agg_column: str,
-                            agg_funcs: List[str] = ['mean', 'sum', 'std', 'min', 'max'],
+                            agg_funcs: Optional[List[str]] = None,
                             inplace: bool = False) -> Union[pd.DataFrame, 'FeatureEngineer']:
         """
         Create aggregation features based on grouping.
@@ -514,12 +562,16 @@ class FeatureEngineer(FeatureEngineeringBase):
         Args:
             group_by: Column(s) to group by
             agg_column: Column to aggregate
-            agg_funcs: List of aggregation functions
+            agg_funcs: List of aggregation functions. Defaults to
+                ['mean', 'sum', 'std', 'min', 'max'] if not provided.
             inplace: If True, modifies internal dataframe. Default False.
 
         Returns:
             DataFrame with aggregation features
         """
+        if agg_funcs is None:
+            agg_funcs = ['mean', 'sum', 'std', 'min', 'max']
+
         df_result = self.df if inplace else self.df.copy()
 
         if isinstance(group_by, str):

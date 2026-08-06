@@ -343,6 +343,49 @@ class TestGetFeatureColumns:
         result = get_feature_columns(df, exclude_columns=['not_present'])
         assert result == ['num']
 
+    def test_typo_exclude_column_logs_warning(self, caplog):
+        """
+        Regression: a typo'd/nonexistent exclude_columns entry (e.g.
+        'taget' instead of 'target') used to be silently ignored with no
+        signal to the caller that their exclusion request had no effect.
+        It should now log a warning naming the missing column(s), matching
+        the style of validate_columns()/get_string_columns() in this same
+        module, while still returning the correct feature columns.
+        """
+        df = pd.DataFrame({'num': [1, 2], 'target': [0, 1]})
+        with caplog.at_level('WARNING'):
+            result = get_feature_columns(
+                df, exclude_columns=['taget'], numeric_only=False
+            )
+        # The typo'd column was never actually excluded (unchanged, tolerant
+        # behavior), but a warning must be logged about it.
+        assert set(result) == {'num', 'target'}
+        assert any('taget' in msg for msg in caplog.messages)
+
+    def test_mixed_valid_and_typo_exclude_columns_warns_only_for_typo(self, caplog):
+        """A mix of a real column and a typo should exclude the real one
+        and warn only about the one that doesn't exist."""
+        df = pd.DataFrame({'num': [1, 2], 'target': [0, 1]})
+        with caplog.at_level('WARNING'):
+            result = get_feature_columns(
+                df, exclude_columns=['target', 'taget'], numeric_only=False
+            )
+        assert result == ['num']
+        assert len(caplog.messages) == 1
+        assert "['taget']" in caplog.messages[0]
+
+    def test_correct_exclude_usage_unchanged_no_warning(self, caplog):
+        """Regression check: normal, correct exclude_columns usage (all
+        entries exist in the DataFrame) should behave exactly as before -
+        no warning logged, and the excluded column removed from the result."""
+        df = pd.DataFrame({'num': [1, 2], 'target': [0, 1]})
+        with caplog.at_level('WARNING'):
+            result = get_feature_columns(
+                df, exclude_columns=['target'], numeric_only=False
+            )
+        assert result == ['num']
+        assert caplog.messages == []
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

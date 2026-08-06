@@ -221,8 +221,8 @@ class VisualizationMixin:
                     x_line = np.linspace(self.df.loc[valid_idx, feature].min(),
                                         self.df.loc[valid_idx, feature].max(), 100)
                     ax.plot(x_line, p(x_line), "r--", alpha=0.8)
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Could not fit regression line for feature '{feature}': {e}")
 
                 ax.set_title(f'{feature} vs {self.target_column}')
 

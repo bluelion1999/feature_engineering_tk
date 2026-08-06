@@ -532,6 +532,11 @@ class DataPreprocessor(FeatureEngineeringBase):
 
         df_result = self.df if inplace else self.df.copy()
 
+        # dropna=True (pandas default): a column with a single non-null value
+        # (e.g. [5, 5, NaN]) is treated as constant regardless of missingness.
+        # Keep this in sync with the constant_columns check in
+        # validate_data_quality() below so both methods agree on what counts
+        # as "constant".
         constant_cols = [col for col in df_result.columns if df_result[col].nunique() <= 1]
 
         if constant_cols:
@@ -905,14 +910,15 @@ class DataPreprocessor(FeatureEngineeringBase):
     # ==================== String/Text Preprocessing ====================
 
     def clean_string_columns(self, columns: List[str],
-                             operations: List[str] = ['strip', 'lower'],
+                             operations: Optional[List[str]] = None,
                              inplace: bool = False) -> Union[pd.DataFrame, 'DataPreprocessor']:
         """
         Clean string columns with common operations.
 
         Args:
             columns: String columns to clean
-            operations: List of operations to apply:
+            operations: List of operations to apply. Defaults to ['strip', 'lower']
+                if not provided:
                 - 'strip': Remove leading/trailing whitespace
                 - 'lower': Convert to lowercase
                 - 'upper': Convert to uppercase
@@ -934,6 +940,8 @@ class DataPreprocessor(FeatureEngineeringBase):
         """
         if not isinstance(columns, list):
             raise TypeError("columns must be a list")
+        if operations is None:
+            operations = ['strip', 'lower']
         if not isinstance(operations, list):
             raise TypeError("operations must be a list")
 
@@ -1145,9 +1153,13 @@ class DataPreprocessor(FeatureEngineeringBase):
             )
 
         # Constant columns
+        # dropna=True (pandas default) to match remove_constant_columns(): a
+        # column with a single non-null value (e.g. [5, 5, NaN]) is still
+        # considered constant regardless of missingness, so the two methods
+        # agree on what gets flagged/dropped.
         validation['constant_columns'] = [
             col for col in self.df.columns
-            if self.df[col].nunique(dropna=False) <= 1
+            if self.df[col].nunique() <= 1
         ]
         if validation['constant_columns']:
             validation['issues_found'].append(

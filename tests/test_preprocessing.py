@@ -295,6 +295,32 @@ class TestStringPreprocessing:
         assert result is preprocessor  # Returns self for chaining
         assert preprocessor.df['name'].tolist() == ['alice', 'bob', 'charlie', 'david']
 
+    def test_clean_string_columns_default_operations(self, string_df):
+        """Regression test for mutable default argument (flake8 B006):
+        omitting `operations` should fall back to ['strip', 'lower']."""
+        preprocessor = DataPreprocessor(string_df)
+        result = preprocessor.clean_string_columns(['name'], inplace=False)
+
+        assert result['name'].tolist() == ['alice', 'bob', 'charlie', 'david']
+
+    def test_clean_string_columns_default_not_shared_across_calls(self, string_df):
+        """Regression test for mutable default argument bug: the default
+        operations list must be created fresh per call (via `operations=None`
+        -> local assignment) rather than being a single mutable object shared
+        across every call/instance of clean_string_columns()."""
+        preprocessor1 = DataPreprocessor(string_df.copy())
+        preprocessor2 = DataPreprocessor(string_df.copy())
+
+        result1 = preprocessor1.clean_string_columns(['name'], inplace=False)
+        result2 = preprocessor2.clean_string_columns(['city'], operations=['upper'], inplace=False)
+        result3 = preprocessor1.clean_string_columns(['name'], inplace=False)
+
+        # Explicit operations passed to one call must not leak into a later
+        # call that relies on the default.
+        assert result1['name'].tolist() == ['alice', 'bob', 'charlie', 'david']
+        assert result3['name'].tolist() == ['alice', 'bob', 'charlie', 'david']
+        assert result2['city'].tolist() == ['NEW YORK  ', '  LOS ANGELES', 'CHICAGO', '  BOSTON  ']
+
     def test_handle_whitespace_variants(self, string_df):
         """Test whitespace variant standardization."""
         df = pd.DataFrame({
@@ -368,6 +394,59 @@ class TestDataValidation:
         assert len(validation['constant_columns']) == 0
         assert len(validation['infinite_values']) == 0
         assert "No major data quality issues detected" in validation['issues_found']
+
+    def test_validate_data_quality_flags_constant_column_with_nan(self):
+        """validate_data_quality() must treat a column with a single non-null
+        value plus NaN (e.g. [5, 5, NaN]) as constant, matching pandas'
+        nunique() default of dropna=True."""
+        df = pd.DataFrame({
+            'const_with_nan': [5, 5, np.nan],
+            'varying': [1, 2, 3]
+        })
+        preprocessor = DataPreprocessor(df)
+        validation = preprocessor.validate_data_quality()
+
+        assert 'const_with_nan' in validation['constant_columns']
+        assert 'varying' not in validation['constant_columns']
+
+    def test_validate_data_quality_flags_all_nan_column_as_constant(self):
+        """A column that is entirely NaN has nunique() == 0 and should still
+        be reported as constant."""
+        df = pd.DataFrame({
+            'all_nan': [np.nan, np.nan, np.nan],
+            'varying': [1, 2, 3]
+        })
+        preprocessor = DataPreprocessor(df)
+        validation = preprocessor.validate_data_quality()
+
+        assert 'all_nan' in validation['constant_columns']
+
+    def test_remove_constant_columns_and_validate_data_quality_agree(self):
+        """Regression test: remove_constant_columns() and validate_data_quality()
+        must classify the same column as constant.
+
+        Previously remove_constant_columns() used nunique() (dropna=True,
+        pandas' default) while validate_data_quality() used
+        nunique(dropna=False). A column like [5, 5, NaN] was therefore
+        silently dropped by remove_constant_columns() while
+        validate_data_quality() reported the dataframe as free of constant
+        columns -- a real, user-facing inconsistency. Both methods now use
+        dropna=True.
+        """
+        df = pd.DataFrame({
+            'const_with_nan': [5, 5, np.nan],
+            'varying': [1, 2, 3]
+        })
+
+        validation = DataPreprocessor(df).validate_data_quality()
+        flagged_as_constant = 'const_with_nan' in validation['constant_columns']
+
+        result = DataPreprocessor(df).remove_constant_columns(inplace=False)
+        dropped_as_constant = 'const_with_nan' not in result.columns
+
+        assert flagged_as_constant is True
+        assert dropped_as_constant is True
+        assert flagged_as_constant == dropped_as_constant
 
     def test_detect_infinite_values(self, quality_df):
         """Test infinite value detection."""

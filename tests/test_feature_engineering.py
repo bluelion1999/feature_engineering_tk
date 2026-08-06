@@ -179,6 +179,56 @@ class TestFeatureEngineer:
         with pytest.raises(ValueError, match="degree must be 2 or 3"):
             engineer.create_polynomial_features(['numeric1'], degree=5)
 
+    # -- create_polynomial_features: degree=3, interaction_only=True -----
+    #
+    # Bug fix: previously this combination matched neither the degree==2
+    # branch nor the "elif degree == 3 and not interaction_only" branch,
+    # silently creating 0 features.
+
+    def test_polynomial_degree3_interaction_only_creates_three_way_terms(self):
+        """degree=3 + interaction_only=True should create 3-way product terms
+        for every combination of 3 distinct columns, and nothing else."""
+        df = pd.DataFrame({
+            'a': [1, 2, 3, 4],
+            'b': [2, 3, 4, 5],
+            'c': [3, 4, 5, 6],
+            'd': [4, 5, 6, 7],
+        })
+        engineer = FeatureEngineer(df)
+
+        result = engineer.create_polynomial_features(
+            ['a', 'b', 'c', 'd'], degree=3, interaction_only=True, inplace=False
+        )
+
+        # C(4,3) = 4 three-way combinations expected
+        expected_cols = [
+            'a_x_b_x_c', 'a_x_b_x_d', 'a_x_c_x_d', 'b_x_c_x_d',
+        ]
+        for col in expected_cols:
+            assert col in result.columns
+
+        # No squared/cubed or pairwise terms should be present
+        for col in ['a_squared', 'a_cubed', 'a_x_b']:
+            assert col not in result.columns
+
+        # Values are correct 3-way products
+        assert (result['a_x_b_x_c'] == df['a'] * df['b'] * df['c']).all()
+
+    def test_polynomial_degree3_interaction_only_too_few_columns(self, caplog):
+        """With fewer than 3 valid numeric columns, degree=3 interaction_only=True
+        should create 0 features and log a warning rather than crash."""
+        df = pd.DataFrame({'a': [1, 2, 3], 'b': [2, 3, 4]})
+        engineer = FeatureEngineer(df)
+
+        with caplog.at_level('WARNING'):
+            result = engineer.create_polynomial_features(
+                ['a', 'b'], degree=3, interaction_only=True, inplace=False
+            )
+
+        # No new columns created
+        assert set(result.columns) == {'a', 'b'}
+        assert any('at least 3' in message for message in caplog.messages)
+
     # -- encode_categorical_onehot --------------------------------------
     #
     # Pins down the pre-existing pd.get_dummies()-based output contract
@@ -305,6 +355,85 @@ class TestFeatureEngineer:
         )
         assert 'categorical_nan' in result_dummy_na.columns
         assert result_dummy_na.loc[2, 'categorical_nan'] == 1
+
+    # -- encode_categorical_label: NaN preservation -----------------------
+    #
+    # Bug fix: `.astype(str)` used to turn real NaN values into the literal
+    # string 'nan', which LabelEncoder then encoded as a normal category,
+    # silently destroying missingness. NaN should now be preserved as NaN.
+
+    def test_label_encoding_preserves_nan_not_inplace(self):
+        """NaN positions should remain NaN (not encoded as a fake category)."""
+        df = pd.DataFrame({'categorical': ['A', 'B', None, 'A', np.nan]})
+        engineer = FeatureEngineer(df)
+
+        result = engineer.encode_categorical_label(['categorical'], inplace=False)
+
+        # NaN positions preserved
+        assert result['categorical'].isna().sum() == 2
+        assert pd.isna(result.loc[2, 'categorical'])
+        assert pd.isna(result.loc[4, 'categorical'])
+
+        # Non-null positions are encoded to numeric values, and equal
+        # categories share the same encoded value
+        assert not pd.isna(result.loc[0, 'categorical'])
+        assert result.loc[0, 'categorical'] == result.loc[3, 'categorical']
+
+        # Only 2 real categories ('A', 'B') were fit - not a fake 'nan' one
+        assert len(engineer.encoders['categorical_label'].classes_) == 2
+        assert 'nan' not in engineer.encoders['categorical_label'].classes_
+
+        # Original dataframe untouched
+        assert engineer.df['categorical'].isna().sum() == 2
+
+    def test_label_encoding_preserves_nan_inplace(self):
+        """Same NaN-preservation guarantee when inplace=True."""
+        df = pd.DataFrame({'categorical': ['A', 'B', None, 'A', np.nan]})
+        engineer = FeatureEngineer(df)
+
+        engineer.encode_categorical_label(['categorical'], inplace=True)
+
+        assert engineer.df['categorical'].isna().sum() == 2
+        assert pd.isna(engineer.df.loc[2, 'categorical'])
+        assert pd.isna(engineer.df.loc[4, 'categorical'])
+        assert len(engineer.encoders['categorical_label'].classes_) == 2
+
+    # -- create_aggregations: mutable default argument --------------------
+    #
+    # Bug fix: agg_funcs used a mutable list default, shared across calls.
+    # Verify default behavior still works and repeated calls don't leak
+    # state between invocations.
+
+    def test_create_aggregations_default_agg_funcs(self):
+        """Default agg_funcs should still produce all 5 standard aggregations."""
+        df = pd.DataFrame({
+            'group': ['x', 'x', 'y', 'y'],
+            'value': [1, 2, 3, 4],
+        })
+        engineer = FeatureEngineer(df)
+
+        result = engineer.create_aggregations('group', 'value', inplace=False)
+
+        for func in ['mean', 'sum', 'std', 'min', 'max']:
+            assert f'value_group_{func}' in result.columns
+
+    def test_create_aggregations_repeated_calls_no_shared_state(self):
+        """Repeated calls with different explicit agg_funcs must not leak
+        state via a shared mutable default list."""
+        df = pd.DataFrame({
+            'group': ['x', 'x', 'y', 'y'],
+            'value': [1, 2, 3, 4],
+        })
+        engineer1 = FeatureEngineer(df)
+        engineer1.create_aggregations('group', 'value', agg_funcs=['mean'], inplace=False)
+
+        engineer2 = FeatureEngineer(df)
+        result2 = engineer2.create_aggregations('group', 'value', inplace=False)
+
+        # Second call using the default should still get all 5 functions,
+        # not just 'mean' leaked over from the first call
+        for func in ['mean', 'sum', 'std', 'min', 'max']:
+            assert f'value_group_{func}' in result2.columns
 
 
 if __name__ == '__main__':

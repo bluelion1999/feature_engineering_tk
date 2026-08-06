@@ -153,9 +153,20 @@ class QualityMixin:
         analyzer = DataAnalyzer(self.df)
         return analyzer.calculate_vif(columns=feature_columns)
 
-    def generate_recommendations(self) -> List[str]:
+    def generate_recommendations(self,
+                                  quality: Optional[Dict[str, Any]] = None,
+                                  mi_df: Optional[pd.DataFrame] = None,
+                                  vif_df: Optional[pd.DataFrame] = None) -> List[str]:
         """
         Generate actionable recommendations based on analysis.
+
+        Args:
+            quality: Pre-computed result of analyze_data_quality(). If None, computed
+                internally. Callers that already have this (e.g. generate_full_report())
+                can pass it in to avoid recomputing it.
+            mi_df: Pre-computed result of analyze_mutual_information(). If None, computed
+                internally.
+            vif_df: Pre-computed result of calculate_vif(). If None, computed internally.
 
         Returns:
             List of recommendation strings
@@ -163,7 +174,8 @@ class QualityMixin:
         recommendations = []
 
         # Data quality recommendations
-        quality = self.analyze_data_quality()
+        if quality is None:
+            quality = self.analyze_data_quality()
 
         if quality['missing_values']:
             high_missing = [k for k, v in quality['missing_values'].items() if v['percent'] > 50]
@@ -210,7 +222,8 @@ class QualityMixin:
 
         # Feature selection recommendations
         try:
-            mi_df = self.analyze_mutual_information()
+            if mi_df is None:
+                mi_df = self.analyze_mutual_information()
             if not mi_df.empty:
                 if self.task == 'classification':
                     # normalized_mi is a fixed absolute bound (see analyze_mutual_information
@@ -248,12 +261,13 @@ class QualityMixin:
                             "since even the top-ranked feature may carry little real predictive "
                             "signal if the target is weakly related to all analyzed features."
                         )
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not compute mutual information recommendations: {e}")
 
         # Multicollinearity check
         try:
-            vif_df = self.calculate_vif()
+            if vif_df is None:
+                vif_df = self.calculate_vif()
             if not vif_df.empty:
                 high_vif = vif_df[vif_df['VIF'] > 10]
                 if len(high_vif) > 0:
@@ -261,8 +275,8 @@ class QualityMixin:
                         f"📉 {len(high_vif)} features have high multicollinearity (VIF>10). "
                         f"Consider removing: {', '.join(high_vif.head(3)['feature'].tolist())}"
                     )
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not compute VIF recommendations: {e}")
 
         if not recommendations:
             recommendations.append("✓ No major issues detected. Data quality looks good!")

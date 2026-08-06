@@ -25,16 +25,39 @@ class ReportingMixin:
               self.generate_recommendations
     """
 
-    def generate_full_report(self) -> Dict[str, Any]:
+    def generate_full_report(self,
+                              check_assumptions: bool = True,
+                              report_effect_sizes: bool = True,
+                              correct_multiple_tests: bool = True,
+                              alpha: float = 0.05) -> Dict[str, Any]:
         """
         Generate complete analysis report with all metrics in structured format.
+
+        Args:
+            check_assumptions: Validate statistical test assumptions (e.g. normality,
+                homogeneity of variance) and fall back to robust alternatives where
+                appropriate. Forwarded to analyze_feature_target_relationship().
+                Default True -- a "full" report should include the fullest available
+                analysis.
+            report_effect_sizes: Include effect sizes (Cohen's d / eta-squared /
+                Cramer's V) alongside p-values. Forwarded to
+                analyze_feature_target_relationship(). Default True.
+            correct_multiple_tests: Apply Benjamini-Hochberg FDR correction across all
+                feature-target tests. Forwarded to analyze_feature_target_relationship().
+                Default True. Note: when True, the per-feature 'significant' column is
+                replaced by 'significant_raw' / 'significant_corrected' / 'pvalue_corrected'
+                (see analyze_feature_target_relationship() docstring) -- the export
+                methods handle both shapes.
+            alpha: Significance level used for the relationship tests and multiple
+                testing correction. Default 0.05.
 
         Returns:
             Dict containing all analysis results:
             - task_info: Basic task information
             - distribution: Class or target distribution
             - imbalance: Class imbalance info (classification only)
-            - relationships: Feature-target relationships
+            - relationships: Feature-target relationships (columns depend on the
+              check_assumptions/report_effect_sizes/correct_multiple_tests flags above)
             - class_stats: Class-wise statistics (classification only)
             - correlations: Feature correlations (regression only)
             - mutual_info: Mutual information scores
@@ -65,29 +88,41 @@ class ReportingMixin:
             corr_df = self.analyze_feature_correlations()
             report['correlations'] = corr_df.to_dict('records') if not corr_df.empty else []
 
-        # Common analyses
-        rel_df = self.analyze_feature_target_relationship()
+        # Common analyses. Each of these is computed exactly once here and, where
+        # generate_recommendations() would otherwise recompute the same analysis
+        # internally, the already-computed result is passed in below.
+        rel_df = self.analyze_feature_target_relationship(
+            check_assumptions=check_assumptions,
+            report_effect_sizes=report_effect_sizes,
+            correct_multiple_tests=correct_multiple_tests,
+            alpha=alpha
+        )
         report['relationships'] = rel_df.to_dict('records') if not rel_df.empty else []
 
         mi_df = self.analyze_mutual_information()
         report['mutual_info'] = mi_df.to_dict('records') if not mi_df.empty else []
 
-        report['data_quality'] = self.analyze_data_quality()
+        quality = self.analyze_data_quality()
+        report['data_quality'] = quality
 
         vif_df = self.calculate_vif()
         report['vif'] = vif_df.to_dict('records') if not vif_df.empty else []
 
-        report['recommendations'] = self.generate_recommendations()
+        report['recommendations'] = self.generate_recommendations(
+            quality=quality, mi_df=mi_df, vif_df=vif_df
+        )
 
         return report
 
-    def export_report(self, filepath: str, format: str = 'html') -> None:
+    def export_report(self, filepath: str, format: str = 'html', **report_kwargs) -> None:
         """
         Export comprehensive analysis report to file.
 
         Args:
             filepath: Path to save the report
             format: Export format ('html', 'markdown', 'json')
+            **report_kwargs: Forwarded to generate_full_report() (e.g.
+                check_assumptions, report_effect_sizes, correct_multiple_tests, alpha).
 
         Raises:
             ValueError: If format is not supported
@@ -95,7 +130,7 @@ class ReportingMixin:
         if format not in ['html', 'markdown', 'json']:
             raise ValueError(f"Format must be 'html', 'markdown', or 'json', got '{format}'")
 
-        report_data = self.generate_full_report()
+        report_data = self.generate_full_report(**report_kwargs)
 
         if format == 'json':
             self._export_json(filepath, report_data)
@@ -218,12 +253,53 @@ class ReportingMixin:
             lines.append("")
             lines.append("### Top 10 Most Significant Features")
             lines.append("")
-            lines.append("| Feature | Test Type | Statistic | P-Value | Significant |")
-            lines.append("|---------|-----------|----------:|--------:|:-----------:|")
-            for item in report_data['relationships'][:10]:
-                sig = "Yes" if item['significant'] else "No"
-                lines.append(f"| {item['feature']} | {item['test_type']} | {item['statistic']:.4f} | {item['pvalue']:.4e} | {sig} |")
+
+            rel_items = report_data['relationships'][:10]
+            # These extra columns only appear when the corresponding
+            # generate_full_report()/analyze_feature_target_relationship() flag was
+            # enabled -- build the table dynamically so we neither crash nor render
+            # empty columns when they're absent.
+            has_corrected = any('pvalue_corrected' in item for item in rel_items)
+            has_effect_size = any('effect_size' in item for item in rel_items)
+
+            header = "| Feature | Test Type | Statistic | P-Value |"
+            sep = "|---------|-----------|----------:|--------:|"
+            if has_corrected:
+                header += " P-Value (Corrected) |"
+                sep += "-------------------:|"
+            header += " Significant |"
+            sep += ":-----------:|"
+            if has_effect_size:
+                header += " Effect Size |"
+                sep += "-----------:|"
+            lines.append(header)
+            lines.append(sep)
+
+            warnings_items = []
+            for item in rel_items:
+                row = f"| {item['feature']} | {item['test_type']} | {item['statistic']:.4f} | {item['pvalue']:.4e} |"
+                if has_corrected:
+                    pc = item.get('pvalue_corrected')
+                    row += f" {pc:.4e} |" if pc is not None else " N/A |"
+                # 'significant' is present when correct_multiple_tests=False; otherwise
+                # fall back to 'significant_corrected'.
+                sig = item.get('significant', item.get('significant_corrected'))
+                row += f" {'Yes' if sig else 'No'} |"
+                if has_effect_size:
+                    es = item.get('effect_size')
+                    row += f" {es:.4f} |" if es is not None else " N/A |"
+                lines.append(row)
+                if item.get('warnings'):
+                    warnings_items.append(item)
             lines.append("")
+
+            if warnings_items:
+                lines.append("> **Note**: Assumption-check warnings were raised for the following features:")
+                lines.append(">")
+                for item in warnings_items:
+                    lines.append(f"> - **{item['feature']}**: {item['warnings']}")
+                lines.append("")
+
             lines.append("---")
             lines.append("")
 
@@ -538,15 +614,49 @@ class ReportingMixin:
 
         # Relationships (collapsible)
         if report_data['relationships']:
+            rel_items = report_data['relationships'][:10]
+            # These extra columns only appear when the corresponding
+            # generate_full_report()/analyze_feature_target_relationship() flag was
+            # enabled -- build the table dynamically so we neither crash nor render
+            # empty columns when they're absent.
+            has_corrected = any('pvalue_corrected' in item for item in rel_items)
+            has_effect_size = any('effect_size' in item for item in rel_items)
+
             html += '<details>'
             html += '<summary>Feature-Target Relationships (Top 10)</summary>'
             html += '<div class="section-content">'
             html += '<table>'
-            html += '<tr><th>Feature</th><th>Test Type</th><th>Statistic</th><th>P-Value</th><th>Significant</th></tr>'
-            for item in report_data['relationships'][:10]:
-                sig_badge = '<span class="badge badge-success">Yes</span>' if item['significant'] else '<span class="badge badge-danger">No</span>'
-                html += f'<tr><td>{item["feature"]}</td><td>{item["test_type"]}</td><td class="number">{item["statistic"]:.4f}</td><td class="number">{item["pvalue"]:.4e}</td><td>{sig_badge}</td></tr>'
+            html += '<tr><th>Feature</th><th>Test Type</th><th>Statistic</th><th>P-Value</th>'
+            if has_corrected:
+                html += '<th>P-Value (Corrected)</th>'
+            html += '<th>Significant</th>'
+            if has_effect_size:
+                html += '<th>Effect Size</th>'
+            html += '</tr>'
+
+            warnings_items = []
+            for item in rel_items:
+                html += f'<tr><td>{item["feature"]}</td><td>{item["test_type"]}</td><td class="number">{item["statistic"]:.4f}</td><td class="number">{item["pvalue"]:.4e}</td>'
+                if has_corrected:
+                    pc = item.get('pvalue_corrected')
+                    html += f'<td class="number">{pc:.4e}</td>' if pc is not None else '<td class="number">N/A</td>'
+                sig = item.get('significant', item.get('significant_corrected'))
+                sig_badge = '<span class="badge badge-success">Yes</span>' if sig else '<span class="badge badge-danger">No</span>'
+                html += f'<td>{sig_badge}</td>'
+                if has_effect_size:
+                    es = item.get('effect_size')
+                    html += f'<td class="number">{es:.4f}</td>' if es is not None else '<td class="number">N/A</td>'
+                html += '</tr>'
+                if item.get('warnings'):
+                    warnings_items.append(item)
             html += '</table>'
+
+            if warnings_items:
+                html += '<div class="warning-box"><strong>Assumption-check warnings:</strong><ul>'
+                for item in warnings_items:
+                    html += f'<li><strong>{item["feature"]}:</strong> {item["warnings"]}</li>'
+                html += '</ul></div>'
+
             html += '</div></details>'
 
         # Data Quality (collapsible)

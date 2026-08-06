@@ -1071,6 +1071,218 @@ class TestPhase5ReportGeneration:
         assert '|' in content  # Table delimiter
         assert '---' in content  # Table header separator
 
+    def test_generate_full_report_default_includes_effect_sizes_and_corrections(self, classification_df):
+        """generate_full_report() defaults (check_assumptions/report_effect_sizes/
+        correct_multiple_tests all True) must actually thread through to
+        analyze_feature_target_relationship(), so the relationships in the report
+        carry effect sizes and corrected p-values instead of the bare
+        feature/test_type/statistic/pvalue/significant produced by that method's
+        own conservative defaults."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        report = analyzer.generate_full_report()
+
+        assert len(report['relationships']) > 0
+        # At least one relationship (the numeric features go through ANOVA/effect
+        # size support) should carry an effect size.
+        assert any('effect_size' in item for item in report['relationships'])
+        # Multiple testing correction replaces 'significant' with these columns.
+        assert all('pvalue_corrected' in item for item in report['relationships'])
+        assert all('significant_corrected' in item for item in report['relationships'])
+        assert all('significant' not in item for item in report['relationships'])
+
+    def test_generate_full_report_explicit_flags_off_matches_legacy_shape(self, classification_df):
+        """Passing the enhancement flags off explicitly should reproduce the
+        pre-fix report shape (plain 'significant', no effect_size/pvalue_corrected),
+        preserving backward compatibility for callers who want the old behavior."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        report = analyzer.generate_full_report(
+            check_assumptions=False,
+            report_effect_sizes=False,
+            correct_multiple_tests=False,
+        )
+
+        assert len(report['relationships']) > 0
+        for item in report['relationships']:
+            assert 'significant' in item
+            assert 'effect_size' not in item
+            assert 'pvalue_corrected' not in item
+
+    def test_export_report_forwards_kwargs_to_generate_full_report(self, classification_df, tmp_path):
+        """export_report()'s **report_kwargs must reach generate_full_report(), and
+        the markdown renderer must adapt its relationships table to whichever
+        columns are actually present instead of assuming the default shape."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        filepath = tmp_path / "report.md"
+
+        analyzer.export_report(str(filepath), format='markdown', correct_multiple_tests=False,
+                                report_effect_sizes=False, check_assumptions=False)
+
+        with open(filepath, 'r') as f:
+            content = f.read()
+
+        # With corrections/effect sizes off, the extra columns should not appear.
+        assert 'P-Value (Corrected)' not in content
+        assert 'Effect Size' not in content
+
+    def test_export_report_html_default_includes_effect_size_column(self, classification_df, tmp_path):
+        """With the new richer defaults, HTML export should render the extra
+        Effect Size / corrected p-value columns without crashing."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        filepath = tmp_path / "report.html"
+
+        analyzer.export_report(str(filepath), format='html')
+
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        assert 'Effect Size' in content
+        assert 'P-Value (Corrected)' in content
+
+    def test_export_report_json_with_explicit_kwargs(self, regression_df, tmp_path):
+        """export_report() forwards kwargs for the json format too."""
+        analyzer = TargetAnalyzer(regression_df, 'target')
+        filepath = tmp_path / "report.json"
+
+        analyzer.export_report(str(filepath), format='json', report_effect_sizes=True,
+                                correct_multiple_tests=False)
+
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+
+        assert len(data['relationships']) > 0
+        assert any('effect_size' in item for item in data['relationships'])
+
+
+class TestReportRecomputeAndExceptionHandling:
+    """Tests for two related fixes:
+
+    1. generate_full_report() previously recomputed analyze_data_quality(),
+       analyze_mutual_information(), and calculate_vif() a second time inside
+       generate_recommendations() (which has no internal caching). It now computes
+       each exactly once and threads the results into generate_recommendations().
+    2. Several bare `except:` clauses (which swallow KeyboardInterrupt/SystemExit
+       too) were narrowed to `except Exception as e:` with a logger.debug call,
+       so failures in these optional sub-computations are diagnosable instead of
+       silently vanishing.
+    """
+
+    def test_generate_full_report_computes_shared_analyses_once(self, classification_df):
+        """analyze_data_quality/analyze_mutual_information/calculate_vif must each
+        be invoked exactly once during generate_full_report(), proving
+        generate_recommendations() reused the precomputed values instead of
+        recomputing them."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+
+        call_counts = {'quality': 0, 'mi': 0, 'vif': 0}
+        orig_quality = analyzer.analyze_data_quality
+        orig_mi = analyzer.analyze_mutual_information
+        orig_vif = analyzer.calculate_vif
+
+        def counting_quality(*args, **kwargs):
+            call_counts['quality'] += 1
+            return orig_quality(*args, **kwargs)
+
+        def counting_mi(*args, **kwargs):
+            call_counts['mi'] += 1
+            return orig_mi(*args, **kwargs)
+
+        def counting_vif(*args, **kwargs):
+            call_counts['vif'] += 1
+            return orig_vif(*args, **kwargs)
+
+        analyzer.analyze_data_quality = counting_quality
+        analyzer.analyze_mutual_information = counting_mi
+        analyzer.calculate_vif = counting_vif
+
+        analyzer.generate_full_report()
+
+        assert call_counts['quality'] == 1
+        assert call_counts['mi'] == 1
+        assert call_counts['vif'] == 1
+
+    def test_generate_recommendations_standalone_still_works(self, classification_df):
+        """generate_recommendations() must remain fully usable with no precomputed
+        arguments (its public no-arg call signature), computing everything itself."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+        recommendations = analyzer.generate_recommendations()
+
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+
+    def test_generate_recommendations_accepts_precomputed_values(self, classification_df):
+        """generate_recommendations() should accept precomputed quality/mi_df/vif_df
+        and use them instead of recomputing, without changing the recommendations
+        produced for the same underlying data."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+
+        quality = analyzer.analyze_data_quality()
+        mi_df = analyzer.analyze_mutual_information()
+        vif_df = analyzer.calculate_vif()
+
+        recs_precomputed = analyzer.generate_recommendations(quality=quality, mi_df=mi_df, vif_df=vif_df)
+        recs_standalone = analyzer.generate_recommendations()
+
+        assert recs_precomputed == recs_standalone
+
+    def test_generate_recommendations_mi_failure_logs_debug_and_degrades_gracefully(self, classification_df, caplog):
+        """If analyze_mutual_information() raises, generate_recommendations() must
+        not crash (the bare except: -> except Exception as e: fix preserves the
+        resilient behavior) but must now log a debug message instead of swallowing
+        the error silently."""
+        analyzer = TargetAnalyzer(classification_df, 'target')
+
+        def broken_mi(*args, **kwargs):
+            raise RuntimeError("boom-mi")
+
+        analyzer.analyze_mutual_information = broken_mi
+
+        with caplog.at_level('DEBUG'):
+            recommendations = analyzer.generate_recommendations()
+
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+        assert any('boom-mi' in record.message for record in caplog.records)
+
+    def test_generate_recommendations_vif_failure_logs_debug_and_degrades_gracefully(self, regression_df, caplog):
+        """Same as above for the VIF recommendation block."""
+        analyzer = TargetAnalyzer(regression_df, 'target')
+
+        def broken_vif(*args, **kwargs):
+            raise RuntimeError("boom-vif")
+
+        analyzer.calculate_vif = broken_vif
+
+        with caplog.at_level('DEBUG'):
+            recommendations = analyzer.generate_recommendations()
+
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+        assert any('boom-vif' in record.message for record in caplog.records)
+
+    def test_plot_feature_vs_target_regression_line_failure_logs_debug(self, regression_df, caplog, monkeypatch):
+        """plot_feature_vs_target() wraps its np.polyfit regression-line fit in a
+        try/except so one feature's fit failure doesn't kill the whole plot. That
+        except must now log a debug message instead of silently passing."""
+        import numpy as np
+        from feature_engineering_tk.target_analyzer import visualization as viz_module
+
+        def broken_polyfit(*args, **kwargs):
+            raise np.linalg.LinAlgError("boom-polyfit")
+
+        monkeypatch.setattr(viz_module.np, 'polyfit', broken_polyfit)
+
+        analyzer = TargetAnalyzer(regression_df, 'target')
+
+        with caplog.at_level('DEBUG'):
+            fig = analyzer.plot_feature_vs_target(features=['feature1'], show=False)
+
+        assert fig is not None
+        import matplotlib.pyplot as plt
+        plt.close(fig)
+
+        assert any('boom-polyfit' in record.message for record in caplog.records)
+
 
 # =======================
 # Phase 7: Feature Engineering Suggestions Tests

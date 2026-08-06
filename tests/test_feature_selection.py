@@ -19,7 +19,7 @@ import pandas as pd
 import numpy as np
 
 from feature_engineering_tk import FeatureSelector, select_features_auto
-from feature_engineering_tk.exceptions import DataTypeError, InvalidMethodError
+from feature_engineering_tk.exceptions import ColumnNotFoundError, DataTypeError, InvalidMethodError
 
 
 @pytest.fixture
@@ -155,8 +155,11 @@ class TestSelectByTargetCorrelation:
             selector.select_by_target_correlation()
 
     def test_target_not_in_dataframe_raises(self, regression_df):
+        """Regression test: this used to raise a plain ValueError; it now
+        raises ColumnNotFoundError (NOT a ValueError subclass), a breaking
+        change for anyone catching ValueError specifically here."""
         selector = FeatureSelector(regression_df, target_column='does_not_exist')
-        with pytest.raises(ValueError, match="not found in dataframe"):
+        with pytest.raises(ColumnNotFoundError, match="not found in dataframe"):
             selector.select_by_target_correlation()
 
     def test_non_numeric_target_raises_datatype_error(self, classification_df):
@@ -223,6 +226,11 @@ class TestSelectByStatisticalTest:
         with pytest.raises(ValueError, match="target_column must be specified"):
             selector.select_by_statistical_test()
 
+    def test_target_not_found_raises(self, regression_df):
+        selector = FeatureSelector(regression_df, target_column='missing')
+        with pytest.raises(ColumnNotFoundError, match="not found in dataframe"):
+            selector.select_by_statistical_test()
+
 
 class TestSelectByImportance:
     """Tests for select_by_importance()."""
@@ -246,8 +254,11 @@ class TestSelectByImportance:
             selector.select_by_importance()
 
     def test_target_not_found_raises(self, regression_df):
+        """Regression test: this used to raise a plain ValueError; it now
+        raises ColumnNotFoundError (NOT a ValueError subclass), a breaking
+        change for anyone catching ValueError specifically here."""
         selector = FeatureSelector(regression_df, target_column='missing')
-        with pytest.raises(ValueError, match="not found in dataframe"):
+        with pytest.raises(ColumnNotFoundError, match="not found in dataframe"):
             selector.select_by_importance()
 
     def test_k_larger_than_features_returns_all(self, regression_df):

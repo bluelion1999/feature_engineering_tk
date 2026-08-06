@@ -10,6 +10,8 @@ from typing import List, Optional, Union
 import pandas as pd
 import numpy as np
 
+from .exceptions import ColumnNotFoundError
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,7 +90,11 @@ def validate_columns(
         List of valid column names that exist in the DataFrame
 
     Raises:
-        ValueError: If raise_on_missing=True and columns are missing
+        ColumnNotFoundError: If raise_on_missing=True and columns are missing.
+            NOTE: Prior to this change, this path raised a generic ValueError;
+            ColumnNotFoundError does NOT subclass ValueError, so callers
+            catching ValueError here need to catch ColumnNotFoundError (or
+            its MLToolkitError base) instead.
         TypeError: If columns is not str or list
     """
     # Normalize to list
@@ -103,7 +109,7 @@ def validate_columns(
     if invalid_cols:
         msg = f"Columns not found in DataFrame: {invalid_cols}"
         if raise_on_missing:
-            raise ValueError(msg)
+            raise ColumnNotFoundError(invalid_cols[0], available_columns=list(df.columns))
         else:
             logger.warning(msg)
 

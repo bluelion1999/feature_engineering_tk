@@ -14,7 +14,7 @@ from .utils import (
     get_numeric_columns,
     get_feature_columns
 )
-from .exceptions import DataTypeError, InvalidMethodError
+from .exceptions import ColumnNotFoundError, DataTypeError, InvalidMethodError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -120,7 +120,8 @@ class FeatureSelector(FeatureEngineeringBase):
         Select top k features most correlated with target.
 
         Raises:
-            ValueError: If target_column is not set or not found in the dataframe
+            ValueError: If target_column is not set
+            ColumnNotFoundError: If target_column is not found in the dataframe
             DataTypeError: If target_column is not numeric (correlation requires a
                 numeric target; use select_by_statistical_test with chi2 or
                 mutual_info_classif for categorical targets instead)
@@ -129,7 +130,7 @@ class FeatureSelector(FeatureEngineeringBase):
             raise ValueError("target_column must be specified for this method")
 
         if self.target_column not in self.df.columns:
-            raise ValueError(f"Target column '{self.target_column}' not found in dataframe")
+            raise ColumnNotFoundError(self.target_column, available_columns=list(self.df.columns))
 
         if not pd.api.types.is_numeric_dtype(self.df[self.target_column]):
             raise DataTypeError(
@@ -182,14 +183,15 @@ class FeatureSelector(FeatureEngineeringBase):
             List of selected feature names
 
         Raises:
-            ValueError: If target_column is not set or not found in the dataframe
+            ValueError: If target_column is not set
+            ColumnNotFoundError: If target_column is not found in the dataframe
             InvalidMethodError: If score_func is an unrecognized string
         """
         if not self.target_column:
             raise ValueError("target_column must be specified for this method")
 
         if self.target_column not in self.df.columns:
-            raise ValueError(f"Target column '{self.target_column}' not found in dataframe")
+            raise ColumnNotFoundError(self.target_column, available_columns=list(self.df.columns))
 
         # Add target column to exclusion list if present
         if exclude_columns is None:
@@ -247,12 +249,18 @@ class FeatureSelector(FeatureEngineeringBase):
                              n_estimators: int = 100,
                              random_state: Optional[int] = 42,
                              exclude_columns: Optional[List[str]] = None) -> List[str]:
-        """Select features using tree-based feature importance."""
+        """
+        Select features using tree-based feature importance.
+
+        Raises:
+            ValueError: If target_column is not set
+            ColumnNotFoundError: If target_column is not found in the dataframe
+        """
         if not self.target_column:
             raise ValueError("target_column must be specified for this method")
 
         if self.target_column not in self.df.columns:
-            raise ValueError(f"Target column '{self.target_column}' not found in dataframe")
+            raise ColumnNotFoundError(self.target_column, available_columns=list(self.df.columns))
 
         # Add target column to exclusion list if present
         if exclude_columns is None:

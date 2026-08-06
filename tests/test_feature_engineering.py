@@ -179,6 +179,59 @@ class TestFeatureEngineer:
         with pytest.raises(ValueError, match="degree must be 2 or 3"):
             engineer.create_polynomial_features(['numeric1'], degree=5)
 
+    def test_scale_features_empty_dataframe_raises(self, sample_df):
+        """scale_features() on a zero-row DataFrame used to crash with a
+        low-level sklearn ValueError ("Found array with 0 sample(s)...");
+        it should now raise a clear, catchable EmptyDataFrameError instead."""
+        from feature_engineering_tk import EmptyDataFrameError
+
+        empty_df = sample_df.iloc[0:0].copy()
+        engineer = FeatureEngineer(empty_df)
+
+        with pytest.raises(EmptyDataFrameError):
+            engineer.scale_features(['numeric1'], method='standard')
+
+    def test_scale_features_non_empty_still_works(self, sample_df):
+        """Regression guard: the empty-DataFrame check must not affect
+        normal, non-empty scaling behavior."""
+        engineer = FeatureEngineer(sample_df)
+        result = engineer.scale_features(['numeric1'], method='standard')
+        assert abs(result['numeric1'].mean()) < 1e-10
+
+    def test_create_binning_quantile_on_constant_column_raises(self, sample_df):
+        """create_binning(strategy='quantile') on a constant (zero-variance)
+        column used to silently succeed while producing an all-NaN binned
+        column (pandas.qcut() collapses every edge to the same value and,
+        with duplicates='drop', returns all-NaN with no warning). It should
+        now raise a clear ConstantColumnError instead."""
+        from feature_engineering_tk import ConstantColumnError
+
+        df = sample_df.copy()
+        df['constant'] = 7
+        engineer = FeatureEngineer(df)
+
+        with pytest.raises(ConstantColumnError):
+            engineer.create_binning('constant', bins=3, strategy='quantile')
+
+    def test_create_binning_uniform_on_constant_column_still_works(self, sample_df):
+        """Regression guard: strategy='uniform' produces a valid (if
+        degenerate) single-bin result for constant columns and must not be
+        affected by the new quantile-only ConstantColumnError guard."""
+        df = sample_df.copy()
+        df['constant'] = 7
+        engineer = FeatureEngineer(df)
+
+        result = engineer.create_binning('constant', bins=3, strategy='uniform')
+        assert 'constant_binned' in result.columns
+        assert result['constant_binned'].notna().all()
+
+    def test_create_binning_quantile_on_non_constant_column_still_works(self, sample_df):
+        """Regression guard: the new constant-column guard must not affect
+        normal quantile binning on a column with variance."""
+        engineer = FeatureEngineer(sample_df)
+        result = engineer.create_binning('numeric1', bins=3, strategy='quantile')
+        assert 'numeric1_binned' in result.columns
+
     # -- create_polynomial_features: degree=3, interaction_only=True -----
     #
     # Bug fix: previously this combination matched neither the degree==2

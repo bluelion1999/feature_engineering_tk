@@ -96,8 +96,11 @@ def check_normality(data: Union[np.ndarray, pd.Series],
     # For large samples, use subsample to avoid computational issues
     if n > 5000 and method == 'shapiro':
         logger.info(f"Large sample (n={n}), using random subsample of 5000 for Shapiro-Wilk test")
-        np.random.seed(42)
-        data_clean = np.random.choice(data_clean, size=5000, replace=False)
+        # Use a local Generator instead of np.random.seed()/np.random.choice() so
+        # this read-only analysis function does not mutate the caller's global
+        # numpy random state as a side effect.
+        rng = np.random.default_rng(42)
+        data_clean = rng.choice(data_clean, size=5000, replace=False)
         n = 5000
 
     # Perform normality test
@@ -563,7 +566,8 @@ def eta_squared(groups: List[Union[np.ndarray, pd.Series]],
 
 
 def cramers_v(contingency_table: Union[np.ndarray, pd.DataFrame],
-              correction: bool = True) -> Dict[str, Any]:
+              correction: bool = True,
+              bias_correction: bool = False) -> Dict[str, Any]:
     """
     Calculate Cramér's V effect size for chi-square test.
 
@@ -576,11 +580,29 @@ def cramers_v(contingency_table: Union[np.ndarray, pd.DataFrame],
 
     Args:
         contingency_table: Contingency table (2D array or DataFrame)
-        correction: Apply bias correction for small samples (default True)
+        correction: Passed straight through to `scipy.stats.chi2_contingency`
+            as its `correction` argument, which applies Yates' continuity
+            correction (default True). Yates' correction is only applied by
+            scipy for 2x2 tables and adjusts the underlying chi-square
+            *test statistic* to better approximate the discrete data with
+            the continuous chi-square distribution -- it is a
+            continuity/test-accuracy adjustment, NOT a "bias correction for
+            small samples" for Cramér's V itself. Despite the name overlap,
+            this is a different concept from `bias_correction` below.
+        bias_correction: If True, also compute the sample-size bias-corrected
+            Cramér's V (Bergsma & Wicher, 2013), which corrects for the
+            well-documented upward bias of the standard Cramér's V estimator
+            in small samples. When True, the returned 'cramers_v' value is
+            this bias-corrected estimate, and the uncorrected estimate is
+            additionally available as 'cramers_v_uncorrected'. Default False
+            (preserves prior behavior/output shape).
 
     Returns:
         Dictionary containing:
-        - cramers_v: Cramér's V value
+        - cramers_v: Cramér's V value (bias-corrected if bias_correction=True)
+        - cramers_v_uncorrected: Uncorrected Cramér's V (only present if
+          bias_correction=True)
+        - bias_correction_applied: Whether bias_correction was used
         - interpretation: Effect size interpretation
         - description: Detailed interpretation
         - chi2_statistic: Chi-square statistic
@@ -609,6 +631,21 @@ def cramers_v(contingency_table: Union[np.ndarray, pd.DataFrame],
         v = np.nan
     else:
         v = np.sqrt(chi2_stat / (n * min_dim))
+
+    v_uncorrected = v
+    if bias_correction and n > 1 and not np.isnan(v):
+        # Bergsma & Wicher (2013) bias-corrected Cramér's V.
+        rows, cols = table.shape
+        phi2 = chi2_stat / n
+        phi2_tilde = max(0.0, phi2 - ((cols - 1) * (rows - 1)) / (n - 1))
+        rows_tilde = rows - ((rows - 1) ** 2) / (n - 1)
+        cols_tilde = cols - ((cols - 1) ** 2) / (n - 1)
+        denom = min(rows_tilde - 1, cols_tilde - 1)
+        if denom <= 0:
+            logger.warning("Bias-corrected Cramér's V denominator <= 0, returning NaN")
+            v = np.nan
+        else:
+            v = np.sqrt(phi2_tilde / denom)
 
     # Interpret based on degrees of freedom
     if np.isnan(v):
@@ -645,13 +682,17 @@ def cramers_v(contingency_table: Union[np.ndarray, pd.DataFrame],
             interpretation = 'large'
         description = f"{interpretation.capitalize()} effect size for large table (V = {v:.3f})"
 
-    return {
+    result = {
         'cramers_v': v,
         'interpretation': interpretation,
         'description': description,
         'chi2_statistic': chi2_stat,
-        'pvalue': pvalue
+        'pvalue': pvalue,
+        'bias_correction_applied': bias_correction
     }
+    if bias_correction:
+        result['cramers_v_uncorrected'] = v_uncorrected
+    return result
 
 
 def pearson_r_to_d(r: float) -> float:
@@ -839,7 +880,19 @@ def calculate_correlation_ci(r: float,
         r = 0.50 [0.33, 0.64]
     """
     if abs(r) >= 1:
-        logger.warning(f"Correlation |r| >= 1 (r={r}), CI may be unreliable")
+        # The Fisher Z-transformation is undefined at r = +-1 (arctanh(+-1) is
+        # +-inf). Because np.tanh saturates at +-1 for infinite input rather
+        # than raising, naively continuing through the math below would
+        # silently produce a zero-width CI of [r, r] -- which reads as
+        # perfect certainty rather than "this cannot be computed". Return
+        # NaN bounds instead, matching the n < 4 branch below.
+        logger.warning(f"Correlation |r| >= 1 (r={r}), CI cannot be computed via Fisher Z-transformation")
+        return {
+            'r': r,
+            'ci_lower': np.nan,
+            'ci_upper': np.nan,
+            'confidence_level': confidence
+        }
 
     if n < 4:
         return {
@@ -917,9 +970,11 @@ def bootstrap_ci(data: Union[np.ndarray, pd.Series],
             'bootstrap_distribution': np.array([])
         }
 
-    # Set random seed if provided
-    if random_state is not None:
-        np.random.seed(random_state)
+    # Use a local Generator instead of np.random.seed() so this function does
+    # not mutate the caller's global numpy random state as a side effect.
+    # Falls back to an unseeded (non-reproducible) Generator when random_state
+    # is not provided.
+    rng = np.random.default_rng(random_state)
 
     # Calculate observed statistic
     observed_stat = statistic_func(data_clean)
@@ -930,7 +985,7 @@ def bootstrap_ci(data: Union[np.ndarray, pd.Series],
 
     for i in range(n_bootstrap):
         # Resample with replacement
-        sample = np.random.choice(data_clean, size=n, replace=True)
+        sample = rng.choice(data_clean, size=n, replace=True)
         bootstrap_stats[i] = statistic_func(sample)
 
     # Calculate percentile CI

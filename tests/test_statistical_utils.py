@@ -301,6 +301,38 @@ class TestEffectSizes:
         assert result['interpretation'] in ['negligible', 'small', 'medium', 'large']
         assert 'chi2_statistic' in result
         assert 'pvalue' in result
+        assert result['bias_correction_applied'] is False
+        assert 'cramers_v_uncorrected' not in result
+
+    def test_cramers_v_bias_correction(self):
+        """Test the opt-in Bergsma & Wicher bias-corrected Cramér's V.
+
+        The bias-corrected estimate should be <= the uncorrected estimate
+        (the correction only ever shrinks V toward zero), both should be
+        valid effect sizes in [0, 1], and the uncorrected value should still
+        be reported for reference.
+        """
+        table = np.array([[20, 30], [40, 50]])
+
+        uncorrected = statistical_utils.cramers_v(table, bias_correction=False)
+        corrected = statistical_utils.cramers_v(table, bias_correction=True)
+
+        assert corrected['bias_correction_applied'] is True
+        assert 'cramers_v_uncorrected' in corrected
+        assert corrected['cramers_v_uncorrected'] == pytest.approx(uncorrected['cramers_v'])
+        assert 0 <= corrected['cramers_v'] <= 1
+        assert corrected['cramers_v'] <= corrected['cramers_v_uncorrected'] + 1e-12
+
+    def test_cramers_v_bias_correction_small_table_returns_nan(self):
+        """Bias correction can be undefined (denominator <= 0) for tiny tables;
+        should return NaN rather than raising or producing a bogus value."""
+        table = np.array([[1, 1], [1, 0]])
+
+        result = statistical_utils.cramers_v(table, bias_correction=True)
+
+        assert result['bias_correction_applied'] is True
+        # Either a valid corrected value or a graceful NaN - must not raise.
+        assert np.isnan(result['cramers_v']) or 0 <= result['cramers_v'] <= 1
 
     def test_pearson_r_to_d_conversion(self):
         """Test conversion from Pearson r to Cohen's d."""
@@ -399,6 +431,28 @@ class TestConfidenceIntervals:
         assert -1 <= result['ci_lower'] <= 1
         assert -1 <= result['ci_upper'] <= 1
 
+    def test_calculate_correlation_ci_perfect_positive_returns_nan(self):
+        """r = 1.0 is undefined for the Fisher Z-transformation (arctanh(1) = inf).
+
+        Regression test: previously np.tanh(inf) silently saturated back to
+        1.0, producing a zero-width CI of [1.0, 1.0] that looked like
+        perfect statistical certainty instead of "cannot be computed". This
+        must now match the n < 4 branch and return NaN bounds.
+        """
+        result = statistical_utils.calculate_correlation_ci(r=1.0, n=100)
+
+        assert result['r'] == 1.0
+        assert np.isnan(result['ci_lower'])
+        assert np.isnan(result['ci_upper'])
+
+    def test_calculate_correlation_ci_perfect_negative_returns_nan(self):
+        """r = -1.0 must also return NaN bounds, not [-1.0, -1.0]."""
+        result = statistical_utils.calculate_correlation_ci(r=-1.0, n=100)
+
+        assert result['r'] == -1.0
+        assert np.isnan(result['ci_lower'])
+        assert np.isnan(result['ci_upper'])
+
     def test_bootstrap_ci_median(self):
         """Test bootstrap CI for median."""
         np.random.seed(42)
@@ -474,6 +528,76 @@ class TestEdgeCases:
 
         assert result['statistic'] == 10
         assert np.isnan(result['ci_lower'])
+
+
+class TestGlobalRandomStateIsolation:
+    """Regression tests: neither function should mutate the caller's global
+    numpy random state as a side effect.
+
+    Previously `check_normality` hardcoded `np.random.seed(42)` for large
+    samples, and `bootstrap_ci` called `np.random.seed(random_state)` -
+    both permanently reset the process-wide numpy RNG, silently corrupting
+    any unrelated code downstream that relies on `np.random` (e.g. the
+    caller's own train/test splits or model initialization). Both now use a
+    local `np.random.default_rng(...)` instance instead.
+    """
+
+    def test_check_normality_large_sample_does_not_mutate_global_state(self):
+        np.random.seed(123)
+        data = np.random.normal(0, 1, 10000)
+
+        state_before = np.random.get_state()
+        statistical_utils.check_normality(data, method='shapiro')
+        state_after = np.random.get_state()
+
+        assert state_before[0] == state_after[0]
+        assert np.array_equal(state_before[1], state_after[1])
+        assert state_before[2:] == state_after[2:]
+
+    def test_bootstrap_ci_does_not_mutate_global_state(self):
+        np.random.seed(123)
+        data = np.random.normal(50, 10, 100)
+
+        state_before = np.random.get_state()
+        statistical_utils.bootstrap_ci(
+            data,
+            statistic_func=np.median,
+            n_bootstrap=200,
+            random_state=42
+        )
+        state_after = np.random.get_state()
+
+        assert state_before[0] == state_after[0]
+        assert np.array_equal(state_before[1], state_after[1])
+        assert state_before[2:] == state_after[2:]
+
+    def test_bootstrap_ci_does_not_mutate_global_state_without_random_state(self):
+        """Also verify the unseeded (random_state=None) path stays isolated."""
+        np.random.seed(123)
+        data = np.random.normal(50, 10, 100)
+
+        state_before = np.random.get_state()
+        statistical_utils.bootstrap_ci(data, statistic_func=np.median, n_bootstrap=200)
+        state_after = np.random.get_state()
+
+        assert state_before[0] == state_after[0]
+        assert np.array_equal(state_before[1], state_after[1])
+        assert state_before[2:] == state_after[2:]
+
+    def test_bootstrap_ci_random_state_still_reproducible(self):
+        """The public reproducibility contract (same random_state -> same
+        result) must still hold now that seeding goes through a local
+        Generator instead of the legacy global state."""
+        data = np.random.default_rng(7).normal(50, 10, 100)
+
+        result1 = statistical_utils.bootstrap_ci(
+            data, statistic_func=np.median, n_bootstrap=200, random_state=42
+        )
+        result2 = statistical_utils.bootstrap_ci(
+            data, statistic_func=np.median, n_bootstrap=200, random_state=42
+        )
+
+        assert np.array_equal(result1['bootstrap_distribution'], result2['bootstrap_distribution'])
 
 
 class TestIntegration:

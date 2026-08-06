@@ -236,6 +236,13 @@ def get_feature_columns(
     if exclude_columns is None:
         exclude_columns = []
 
+    # Warn about exclude_columns entries that don't actually exist in the
+    # DataFrame (e.g. a typo like 'taget' instead of 'target') so callers
+    # aren't silently left thinking their exclusion request took effect.
+    missing = [col for col in exclude_columns if col not in df.columns]
+    if missing:
+        logger.warning(f"exclude_columns not found in DataFrame: {missing}")
+
     # Select columns based on type
     if numeric_only:
         cols = df.select_dtypes(include=[np.number]).columns.tolist()

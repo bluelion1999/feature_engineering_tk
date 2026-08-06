@@ -180,18 +180,35 @@ class DataAnalyzer(FeatureEngineeringBase):
         return df_high_corr.reset_index(drop=True)
 
     def get_cardinality_info(self) -> pd.DataFrame:
-        """Get cardinality information for all columns."""
+        """
+        Get cardinality information for all columns.
+
+        Returns:
+            DataFrame with columns: column, unique_count, cardinality_ratio, dtype
+            sorted by unique_count descending. If the underlying DataFrame has
+            0 rows, cardinality_ratio is undefined (no rows to compute a ratio
+            over) and is set to NaN for every column rather than raising.
+        """
+        n_rows = len(self.df)
+        if n_rows == 0:
+            logger.warning(
+                "get_cardinality_info() called on a DataFrame with 0 rows; "
+                "cardinality_ratio is undefined and will be set to NaN"
+            )
+
         cardinality = []
         for col in self.df.columns:
             unique_count = self.df[col].nunique()
             cardinality.append({
                 'column': col,
                 'unique_count': unique_count,
-                'cardinality_ratio': unique_count / len(self.df),
+                'cardinality_ratio': (unique_count / n_rows) if n_rows > 0 else float('nan'),
                 'dtype': str(self.df[col].dtype)
             })
 
-        df_cardinality = pd.DataFrame(cardinality)
+        df_cardinality = pd.DataFrame(
+            cardinality, columns=['column', 'unique_count', 'cardinality_ratio', 'dtype']
+        )
         return df_cardinality.sort_values('unique_count', ascending=False).reset_index(drop=True)
 
     def calculate_vif(self, columns: Optional[List[str]] = None) -> pd.DataFrame:

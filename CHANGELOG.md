@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `utils.get_string_columns()` silently dropped Categorical-dtype columns, causing `clean_string_columns()`, `handle_whitespace_variants()`, and `extract_string_length()` to silently no-op on them. `_is_string_like_dtype()` now treats any Categorical as string-like; `data_analysis.get_categorical_summary()` simplified to rely on this instead of its own separate `select_dtypes(include=['category'])` workaround.
   - `handle_outliers(action='replace')` crashed with `TypeError: Invalid value ... for dtype 'int64'` when the replacement value (median/mean/nan) was fractional or NaN on an `int64` column; the sibling `action='cap'` branch already had this upcast-to-float fix, `action='replace'` was missed.
   - `data_analysis.detect_misclassified_categorical()` used a string-literal dtype check (`col_data.dtype in ['int64', 'int32', ...]`) that never matches pandas nullable integer dtypes (`Int64`, etc.); switched to `pd.api.types.is_integer_dtype()`.
+- **`DataAnalyzer.get_cardinality_info()` crashed on an empty DataFrame** - `unique_count / len(self.df)` is plain Python `int` division, so calling it on a DataFrame with columns but 0 rows raised `ZeroDivisionError` instead of returning a usable result (contrast with `get_missing_summary()`'s equivalent ratio, which is a pandas `Series` division and safely produces `NaN` rather than crashing). `cardinality_ratio` is now set to `NaN` for every column when the DataFrame has 0 rows, with a `logger.warning` noting the degenerate case, matching the toolkit's "log, don't crash on empty input" convention; a DataFrame with 0 rows and 0 columns now correctly returns an empty DataFrame with the expected `column`/`unique_count`/`cardinality_ratio`/`dtype` columns instead of a shapeless empty one. Audited the rest of `data_analysis.py` for the same `/ len(self.df)` / `/ len(df` pattern - the only other occurrence (`get_missing_summary()`) is a Series division and does not share this risk.
 
 ### Tests
 
@@ -49,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added tests proving `recommend_models()` now fires the Huber Regressor recommendation for a regression target with genuine extreme outliers, and does not fire it for a clean target.
 - Added a false-positive regression test (large-N, negligible effect, not flagged) and a true-positive test (near-perfect proxy feature, still flagged) for classification leakage detection.
 - Added an all-noise-features regression test proving no feature gets a misleadingly perfect `relative_mi` score, a strong-feature-distinguishable-from-noise sanity test, and a `fillna(0)` warning test for `analyze_mutual_information()`.
+- Added regression tests for `get_cardinality_info()`: a normal-DataFrame case pinning `cardinality_ratio` values and descending sort order, a 0-row/2-column case asserting `NaN` ratios instead of `ZeroDivisionError`, and a 0-row/0-column case asserting the correct empty-but-shaped output columns.
 
 ## [2.4.3] - 2026-01-20
 

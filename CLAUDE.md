@@ -231,10 +231,6 @@
    - `get_feature_columns()`: Get feature columns with exclusions
    - Eliminates ~250 lines of duplicate validation code
 
-3. **@inplace_transform Decorator** (`base.py`):
-   - Handles inplace transformation pattern automatically
-   - Available for future use in simplifying method implementations
-
 #### Refactored Classes
 
 1. **DataPreprocessor** (30+ methods updated):
@@ -435,11 +431,6 @@ if not columns:
 - Shared `__init__(df)`: DataFrame validation and copying
 - Shared `get_dataframe()`: Returns copy of internal DataFrame
 - Inherited by: DataPreprocessor, FeatureEngineer, DataAnalyzer, TargetAnalyzer, FeatureSelector
-
-**@inplace_transform Decorator**:
-- Handles inplace transformation pattern automatically
-- Available for future use in method simplification
-- Manages DataFrame copying and return value logic
 
 ### utils.py (NEW)
 **Utility functions for validation and column selection**
